@@ -17,19 +17,15 @@ public:
 
     ~RenderLayer();
 
-    // TBH I don't love this part
-    // The RenderLayer doesn't own nor exactly care about its render targets... Except for this one
-    //void createDepthRenderbuffer(int width, int height, bool stencil = false, int samples = 1);
-
     void setRenderBufferAttachment(RenderBuffer* renderBuffer);
 
-    void setDepthTexture(Texture* texture, int textureArrayLayer = 0);
+    void setDepthTexture(Texture* texture, uint32_t textureArrayLayer = 0);
 
-    void setTextureAttachment(int index, Texture* texture, int textureArrayLayer = 0);
+    void setTextureAttachment(uint32_t index, Texture* texture, uint32_t textureArrayLayer = 0);
 
-    void setEnabledDrawTargets(std::vector<int> targets);
+    void setEnabledDrawTargets(std::vector<uint32_t> targets);
 
-    void setEnabledReadTarget(int target);
+    void setEnabledReadTarget(uint32_t target);
 
     void bind(GLenum bindTarget = GL_FRAMEBUFFER);
 
@@ -39,10 +35,9 @@ public:
 
 private:
 
-    //GLuint m_depthRbo;
     GLuint m_fbo;
 
-    int m_width, m_height;
+    uint32_t m_width, m_height;
 
     GLint m_colorInternalFormat, m_colorFormat;
     bool m_fpComponents;

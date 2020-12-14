@@ -18,8 +18,6 @@
 #include "scene.h"
 
 
-const int FRAMES = 3;
-
 struct FrameUpdateParam {
     App* pApp;
 
@@ -28,9 +26,12 @@ struct FrameUpdateParam {
     uintptr_t renderParam;
 
     int frame = 0;
+    JobScheduler::CounterHandle renderCounters[2];
 
     double lastFrameTime;
     double lastGameStateTime;
+
+    Scene* pScene;
 
     Animation* pAnimation;
     Skeleton* pSkeleton;
@@ -48,7 +49,6 @@ void FrameUpdateJob(uintptr_t param) {
 
     bool pause = glfwGetKey( pParam->pApp->getWindow()->getHandle(), GLFW_KEY_P) == GLFW_PRESS;
 
-    Renderer::RendererJobParam* pRenderParam = reinterpret_cast<Renderer::RendererJobParam*>(pParam->renderParam);
     double time = glfwGetTime();
     double dt = time - pParam->lastFrameTime;
 
@@ -56,8 +56,8 @@ void FrameUpdateJob(uintptr_t param) {
         double gameStateTime = pParam->lastGameStateTime + dt;
 
         float radius = 10.0f;
-        pRenderParam->pScene->getActiveCamera()->setPosition(glm::vec3(radius*glm::cos(0.25f * gameStateTime), 2.0, radius*glm::sin(0.25f * gameStateTime)));
-        pRenderParam->pScene->getActiveCamera()->setDirection(glm::vec3(1, 0, 1) * -pRenderParam->pScene->getActiveCamera()->getPosition());
+        pParam->pScene->getActiveCamera()->setPosition(glm::vec3(radius*glm::cos(0.25f * gameStateTime), 2.0, radius*glm::sin(0.25f * gameStateTime)));
+        pParam->pScene->getActiveCamera()->setDirection(glm::vec3(1, 0, 1) * -pParam->pScene->getActiveCamera()->getPosition());
 
         if (pParam->pAnimation && pParam->pSkeleton) {
             pParam->pSkeleton->clearPose();
@@ -80,15 +80,24 @@ void FrameUpdateJob(uintptr_t param) {
     pParam->lastFrameTime = time;
 
 
-    JobScheduler::JobDeclaration renderDecl, updateDecl;
+    JobScheduler::JobDeclaration preRenderDecl, renderDecl, updateDecl;
+
+    preRenderDecl.param = pParam->renderParam;
+    preRenderDecl.pFunction = Renderer::preRenderJob;
+    preRenderDecl.signalCounters[0] = pParam->pScheduler->getCounterByID("pr"); //pParam->renderCounter[pParam->frame];
+    preRenderDecl.numSignalCounters = 1;
+    preRenderDecl.waitCounter = pParam->renderCounters[(pParam->frame+1)%2];
 
     renderDecl.param = pParam->renderParam;
-    renderDecl.pFunction = Renderer::dispatchRenderJobs;
-    renderDecl.signalCounters[0] = pParam->pScheduler->getCounterByID("r"); //pParam->renderCounter[pParam->frame];
+    renderDecl.pFunction = Renderer::renderJob;
+    renderDecl.signalCounters[0] = pParam->renderCounters[pParam->frame]; //pParam->renderCounter[pParam->frame];
     renderDecl.numSignalCounters = 1;
-    renderDecl.waitCounter = JobScheduler::COUNTER_NULL;
+    renderDecl.waitCounter = pParam->pScheduler->getCounterByID("pr");
 
-    if(!pause) pParam->pScheduler->enqueueJob(renderDecl);
+    if(!pause) {
+        pParam->pScheduler->enqueueJob(preRenderDecl);
+        pParam->pScheduler->enqueueJob(renderDecl);
+    }
 
 
     if (pParam->pApp->isRunning()) {
@@ -97,8 +106,8 @@ void FrameUpdateJob(uintptr_t param) {
         updateDecl.signalCounters[0] = pParam->pScheduler->getCounterByID("u");
         updateDecl.numSignalCounters = 1;
         // The next update job will wait until this render job has finished to begin executing
-        updateDecl.waitCounter = pParam->pScheduler->getCounterByID("r"); //pParam->renderCounter[pParam->frame];
-        pParam->frame = (pParam->frame+1)%FRAMES;
+        updateDecl.waitCounter = pParam->pScheduler->getCounterByID("pr"); //pParam->renderCounter[pParam->frame];
+        pParam->frame = (pParam->frame+1)%2;
 
         pParam->pScheduler->enqueueJob(updateDecl);
     }
@@ -113,8 +122,8 @@ int main() {
 
     try {
         App::InitParameters param;
-        param.windowInititalHeight = 1024;
-        param.windowInititialWidth = 1024;
+        param.windowInititalHeight = 800;
+        param.windowInititialWidth = 1280;
         pApp->init(param);
     } catch (std::exception &e) {
         std::cerr << "Failed to initialize." << std::endl;
@@ -145,11 +154,12 @@ int main() {
         param.shadowMapLightBleedCorrectionBias = 0.0f;
         param.exposure = 1.0f;
         param.numBloomLevels = 4;
+        param.initialWidth = pApp->getWindow()->getWidth();
+        param.initialHeight = pApp->getWindow()->getHeight();
 
-        pRenderer->setParameters(param);
-        pRenderer->init();
+        pRenderer->init(param);
 
-        pRenderer->setViewport(pApp->getWindow()->getWidth(), pApp->getWindow()->getHeight());
+        //pRenderer->setViewport(pApp->getWindow()->getWidth(), pApp->getWindow()->getHeight());
         pApp->getWindow()->releaseContext();
     }
 
@@ -218,8 +228,6 @@ int main() {
                 models[i].setJointBoundingSpheres(meshDatas[i].computeJointBoundingSpheres(models[i].getSkeletonDescription()->getNumJoints()));
                 skeletons.emplace_back(&skeletonDescriptions[skeletonDescIndices[i]]);
             }
-
-            BoundingSphere b = models[i].getBoundingSphere();
         }
     }
     pApp->getWindow()->releaseContext();
@@ -256,14 +264,18 @@ int main() {
     rParam.pScene = pScene;
     rParam.pWindow = pApp->getWindow();
     rParam.pScheduler = pScheduler;
+    rParam.signalCounterHandle = pScheduler->getCounterByID("pr");
 
     // Frame update job
     FrameUpdateParam uParam = {};
     uParam.pApp = pApp;
     uParam.pScheduler = pScheduler;
+    uParam.pScene = pScene;
     uParam.renderParam = reinterpret_cast<uintptr_t>(&rParam);
     uParam.lastFrameTime = glfwGetTime();
     uParam.lastGameStateTime = uParam.lastFrameTime;
+    uParam.renderCounters[0] = pScheduler->getCounterByID("r0");
+    uParam.renderCounters[1] = pScheduler->getCounterByID("r1");
 
     if (!skeletons.empty()) {
         uParam.pSkeleton = &skeletons.back();

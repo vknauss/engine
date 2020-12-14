@@ -9,30 +9,71 @@ Texture::~Texture() {
     glDeleteTextures(1, &m_textureID);
 }
 
-void Texture::allocateData(void* data) {
+void Texture::allocateData(const void* data) {
     glBindTexture(m_textureTarget, m_textureID);
 
     if(m_parameters.cubemap) {
         for(GLenum face = GL_TEXTURE_CUBE_MAP_POSITIVE_X; face <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z; ++face) {
-            glTexImage2D(face, 0, m_internalFormat, m_parameters.width, m_parameters.height, 0, m_format, m_componentType, data);
+            glTexImage2D(
+                face,
+                0,
+                m_internalFormat,
+                static_cast<GLsizei>(m_parameters.width),
+                static_cast<GLsizei>(m_parameters.height),
+                0,
+                m_format,
+                m_componentType,
+                data);
         }
     } else if(m_parameters.arrayLayers  > 1) {
         if(m_parameters.samples > 1) {
-            glTexImage3DMultisample(m_textureTarget, m_parameters.samples, m_internalFormat, m_parameters.width, m_parameters.height, m_parameters.arrayLayers, GL_TRUE);
+            glTexImage3DMultisample(
+                m_textureTarget,
+                static_cast<GLsizei>(m_parameters.samples),
+                static_cast<GLenum>(m_internalFormat),
+                static_cast<GLsizei>(m_parameters.width),
+                static_cast<GLsizei>(m_parameters.height),
+                static_cast<GLsizei>(m_parameters.arrayLayers),
+                GL_TRUE);
         } else {
-            glTexImage3D(m_textureTarget, 0, m_internalFormat, m_parameters.width, m_parameters.height, m_parameters.arrayLayers, 0, m_format, m_componentType, data);
+            glTexImage3D(
+                m_textureTarget,
+                0,
+                m_internalFormat,
+                static_cast<GLsizei>(m_parameters.width),
+                static_cast<GLsizei>(m_parameters.height),
+                static_cast<GLsizei>(m_parameters.arrayLayers),
+                0,
+                m_format,
+                m_componentType,
+                data);
         }
 
     } else {
         if(m_parameters.samples > 1) {
-            glTexImage2DMultisample(m_textureTarget, m_parameters.samples, m_internalFormat, m_parameters.width, m_parameters.height, GL_TRUE);
+            glTexImage2DMultisample(
+                m_textureTarget,
+                static_cast<GLsizei>(m_parameters.samples),
+                static_cast<GLenum>(m_internalFormat),
+                static_cast<GLsizei>(m_parameters.width),
+                static_cast<GLsizei>(m_parameters.height),
+                GL_TRUE);
         } else {
-            glTexImage2D(m_textureTarget, 0, m_internalFormat, m_parameters.width, m_parameters.height, 0, m_format, m_componentType, data);
+            glTexImage2D(
+                m_textureTarget,
+                0,
+                m_internalFormat,
+                static_cast<GLsizei>(m_parameters.width),
+                static_cast<GLsizei>(m_parameters.height),
+                0,
+                m_format,
+                m_componentType,
+                data);
         }
     }
 }
 
-void Texture::bind(int index) const {
+void Texture::bind(uint32_t index) const {
     glActiveTexture(GL_TEXTURE0 + index);
     glBindTexture(m_textureTarget, m_textureID);
 }
@@ -48,7 +89,7 @@ void Texture::generateMipmaps() {
     glGenerateMipmap(m_textureTarget);
 }
 
-void getFormat(int nComponents, int nBits, bool useFloat, bool isBGR, GLenum& format, GLenum& internalFormat, GLenum& componentType) {
+void getFormat(uint32_t nComponents, uint32_t nBits, bool useFloat, bool isBGR, GLenum& format, GLint& internalFormat, GLenum& componentType) {
     switch(nComponents) {
     case 1:
         format = GL_RED;
@@ -88,6 +129,7 @@ void getFormat(int nComponents, int nBits, bool useFloat, bool isBGR, GLenum& fo
         }
         break;
     default:
+        assert(0);
         break;
     }
 
@@ -117,7 +159,8 @@ void Texture::updateParameters() {
     }
 
     if(!m_parameters.useDepthComponent) {
-        GLenum format, internalFormat, componentType;
+        GLenum format, componentType;
+        GLint internalFormat;
         getFormat(
             m_parameters.numComponents,
             m_parameters.bitsPerComponent,
@@ -145,10 +188,7 @@ void Texture::updateParameters() {
 
     glBindTexture(m_textureTarget, m_textureID);
 
-
-
     if (m_parameters.samples <= 1) {
-
         if (m_parameters.useLinearFiltering) {
             glTexParameteri(m_textureTarget, GL_TEXTURE_MIN_FILTER, m_parameters.useMipmapFiltering? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
             glTexParameteri(m_textureTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -178,13 +218,10 @@ void Texture::updateParameters() {
         } else {
             glTexParameterf(m_textureTarget, GL_TEXTURE_MAX_ANISOTROPY_EXT, 1.0);
         }
-
     }
-
-
 }
 
 void Texture::validateParameters(const TextureParameters& parameters) {
-    assert(parameters.useDepthComponent || parameters.numComponents > 0 && parameters.numComponents <= 4);
+    assert(parameters.useDepthComponent || (parameters.numComponents > 0 && parameters.numComponents <= 4));
     assert(parameters.arrayLayers >= 0);
 }

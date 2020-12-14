@@ -6,12 +6,12 @@
 #include <GL/glew.h>
 
 struct TextureParameters {
-    int width;
-    int height;
-    int arrayLayers;
-    int numComponents;
-    int bitsPerComponent;
-    int samples;
+    uint32_t width;
+    uint32_t height;
+    uint32_t arrayLayers;
+    uint32_t numComponents;
+    uint32_t bitsPerComponent;
+    uint32_t samples;
     bool cubemap;
     bool isBGR;
     bool useFloatComponents;
@@ -30,9 +30,9 @@ public:
 
     ~Texture();
 
-    void allocateData(void* data);
+    void allocateData(const void* data);
 
-    void bind(int index) const;
+    void bind(uint32_t index) const;
 
     void setParameters(TextureParameters parameters);
 
@@ -52,8 +52,8 @@ private:
 
     GLuint m_textureID;
 
-    GLint m_format;
     GLint m_internalFormat;
+    GLenum m_format;
     GLenum m_textureTarget;
     GLenum m_componentType;
 

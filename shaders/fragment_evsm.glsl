@@ -3,7 +3,7 @@
 in vec2 v_texCoords;
 
 uniform sampler2DArray depthTextureArray;
-uniform int arrayLayer;
+uniform uint arrayLayer;
 uniform int enableEVSM;
 
 const float cPos = 42.0;

@@ -1,33 +1,16 @@
 #include "render_layer.h"
 
 #include <cassert>
-#include <iostream>
 #include <stdexcept>
 
 
 RenderLayer::RenderLayer() {
     glGenFramebuffers(1, &m_fbo);
-    //glGenRenderbuffers(1, &m_depthRbo);
 }
 
 RenderLayer::~RenderLayer() {
-    //glDeleteRenderbuffers(1, &m_depthRbo);
     glDeleteFramebuffers(1, &m_fbo);
 }
-
-/*void RenderLayer::createDepthRenderbuffer(int width, int height, bool stencil, int samples) {
-    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-
-    glBindRenderbuffer(GL_RENDERBUFFER, m_depthRbo);
-    if(samples > 1) {
-        glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, stencil ? GL_DEPTH24_STENCIL8 : GL_DEPTH_COMPONENT32, width, height);
-    } else {
-        glRenderbufferStorage(GL_RENDERBUFFER, stencil ? GL_DEPTH24_STENCIL8 : GL_DEPTH_COMPONENT32, width, height);
-    }
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthRbo);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}*/
 
 void RenderLayer::setRenderBufferAttachment(RenderBuffer* renderBuffer) {
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
@@ -39,7 +22,7 @@ void RenderLayer::setRenderBufferAttachment(RenderBuffer* renderBuffer) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void setAttachment(GLuint fboID, GLenum attachment, Texture* texture, int layer) {
+void setAttachment(GLuint fboID, GLenum attachment, Texture* texture, uint32_t layer) {
     glBindFramebuffer(GL_FRAMEBUFFER, fboID);
 
     if(texture == nullptr) {
@@ -52,7 +35,7 @@ void setAttachment(GLuint fboID, GLenum attachment, Texture* texture, int layer)
             if(texture->getParameters().cubemap) {
                 glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_CUBE_MAP_POSITIVE_X+layer, texture->getHandle(), 0);
             } else {
-                glFramebufferTextureLayer(GL_FRAMEBUFFER, attachment, texture->getHandle(), 0, layer);
+                glFramebufferTextureLayer(GL_FRAMEBUFFER, attachment, texture->getHandle(), 0, static_cast<GLint>(layer));
             }
         } else {
             glFramebufferTexture(GL_FRAMEBUFFER, attachment, texture->getHandle(), 0);
@@ -68,15 +51,15 @@ void setAttachment(GLuint fboID, GLenum attachment, Texture* texture, int layer)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void RenderLayer::setDepthTexture(Texture* texture, int textureArrayLayer) {
+void RenderLayer::setDepthTexture(Texture* texture, uint32_t textureArrayLayer) {
     setAttachment(m_fbo, GL_DEPTH_ATTACHMENT, texture, textureArrayLayer);
 }
 
-void RenderLayer::setTextureAttachment(int index, Texture* texture, int textureArrayLayer) {
+void RenderLayer::setTextureAttachment(uint32_t index, Texture* texture, uint32_t textureArrayLayer) {
     setAttachment(m_fbo, GL_COLOR_ATTACHMENT0+index, texture, textureArrayLayer);
 }
 
-void RenderLayer::setEnabledDrawTargets(std::vector<int> targets) {
+void RenderLayer::setEnabledDrawTargets(std::vector<uint32_t> targets) {
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
 
     std::vector<GLenum> drawBuffers(targets.size());
@@ -93,7 +76,7 @@ void RenderLayer::setEnabledDrawTargets(std::vector<int> targets) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void RenderLayer::setEnabledReadTarget(int target) {
+void RenderLayer::setEnabledReadTarget(uint32_t target) {
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
 
     glReadBuffer(GL_COLOR_ATTACHMENT0 + target);

@@ -37,23 +37,24 @@ struct RendererParameters {
     bool enableSSAO = true;
     bool enableMSAA = true;
 
-    bool testToggle = true;
+    //bool testToggle = true;
 
-    int numBloomLevels = 3;
+    uint32_t numBloomLevels = 3;
 
     bool useCubemapGeometryShader = false;
 
-    int shadowMapResolution = 1024;
-    int shadowMapFilterResolution = 512;
-    int shadowMapNumCascades = 4;
+    uint32_t shadowMapResolution = 1024;
+    uint32_t shadowMapFilterResolution = 512;
+    uint32_t shadowMapNumCascades = 4;
     float shadowMapCascadeScale = 0.4f;
     float shadowMapCascadeBlurSize = 0.35f;
     float shadowMapLightBleedCorrectionBias = 0.0f;
     float shadowMapLightBleedCorrectionPower = 1.0f;
     float shadowMapMaxDistance = 50.0f;
 
-    int maxPointLightShadowMaps = 5;  // 0 = disabled, negative = unlimited
-    int pointLightShadowMapResolution = 512;
+    uint32_t maxPointLightShadowMaps = 5;  // 0 = disabled
+
+    uint32_t pointLightShadowMapResolution = 512;
     float pointLightShadowMapNear = 0.2;
 
     float ambientPower = 2.0f;
@@ -63,7 +64,8 @@ struct RendererParameters {
     float exposure = 1.0f;
     float gamma = 2.2f;
 
-    int maxSkinningBones = 80;
+    uint32_t initialWidth = 1280;
+    uint32_t initialHeight = 800;
 };
 
 class Renderer {
@@ -88,11 +90,9 @@ public:
         return m_parameters;
     }
 
-    void setParameters(const RendererParameters& parameters);
-
     // Initialize the resources for rendering: shaders, render layers/targets, etc
     //virtual
-    void init();
+    void init(const RendererParameters& parameters = RendererParameters());
 
     // Free resources
     void cleanup();
@@ -101,7 +101,7 @@ public:
     // These will NOT be initialized until this method is called, so call it early
     // Does not need to be called every frame unless the viewport is changing
     //virtual
-    void setViewport(int width, int height);
+    void setViewport(uint32_t width, uint32_t height);
 
     // Call this every frame before render() to load calls
     // or don't if the game is paused or something, then old calls will still be loaded
@@ -109,15 +109,17 @@ public:
     //void setupForRender(const Scene* pScene);
 
 
-
     struct RendererJobParam {
         Renderer* pRenderer;
-        Scene* pScene;
+        const Scene* pScene;
         Window* pWindow;
         JobScheduler* pScheduler;
+        JobScheduler::CounterHandle signalCounterHandle;
     };
 
-    static void dispatchRenderJobs(uintptr_t param);
+    static void preRenderJob(uintptr_t param);
+
+    static void renderJob(uintptr_t param);
 
 
 private:
@@ -136,37 +138,26 @@ private:
     // A bucket corresponds to a group of calls that all get rendered in the
     // same way, i.e. to the same layer with the same shader and data types
     struct CallBucket {
-        //std::vector<CallInfo*> callInfos;
         std::vector<CallInfo> callInfos;
+
         std::vector<bool> usageFlags;
-        //std::map<CallHeader, uint32_t> headerMap;
-        //std::map<const Model*, uint32_t> modelMap;
 
         std::vector<float> instanceTransformFloats;
 
         GLuint instanceTransformBuffer;
 
         uint32_t numInstances = 0;
-        //uint32_t numMeshes = 0;
-
-        //uint32_t fcounter = 0;
 
         bool buffersInitialized = false;
-
 
         CallBucket() :
             callInfos(),
             usageFlags(),
-            //modelMap(),
             instanceTransformFloats(),
             instanceTransformBuffer(),
             numInstances(0),
-            //fcounter(0),
             buffersInitialized(false) {
-
-            //instanceTransformFloats.reserve(512);
         }
-
     };
 
     // Member variables: (a lot)
@@ -248,15 +239,15 @@ private:
     std::vector<float> m_pointLightBoundingSphereRadii;
     std::vector<int> m_pointLightShadowMapIndices;
 
-    std::vector<int> m_pointLightShadowMapLightIndices;
+    std::vector<uint32_t> m_pointLightShadowMapLightIndices;
     std::vector<float> m_pointLightShadowMapLightKeys;
 
     std::vector<glm::mat4> m_pointLightShadowMapMatrices;
 
     std::vector<BoundingSphere> m_pointLightBoundingSpheres;
 
-    int m_numPointLightShadowMaps;
-    int m_inUsePointLightShadowMaps;
+    uint32_t m_numPointLightShadowMaps;
+    uint32_t m_inUsePointLightShadowMaps;
 
     glm::mat4 m_cameraViewMatrix;
     glm::mat4 m_cameraProjectionMatrix;
@@ -269,15 +260,12 @@ private:
     glm::vec3 m_lightDirectionViewSpace;
     glm::vec3 m_ambientLightIntensity;
 
-    std::vector<glm::mat4> m_skinningMatrices;
-    std::vector<glm::mat3> m_skinningMatricesIT;
-
     Mesh m_fullScreenQuad;
     Mesh m_pointLightSphere;
 
     JobScheduler* m_pScheduler;
 
-    const Camera* m_pActiveCamera = nullptr;
+    //const Camera* m_pActiveCamera = nullptr;
 
     const Mesh* m_pBoundMesh = nullptr;
 
@@ -286,8 +274,8 @@ private:
     const Texture* m_pBoundEmissionTexture = nullptr;
     const Texture* m_pBoundMetallicRoughnessTexture = nullptr;
 
-    int m_viewportWidth;
-    int m_viewportHeight;
+    uint32_t m_viewportWidth;
+    uint32_t m_viewportHeight;
 
     bool m_directionalLightEnabled;
     bool m_isInitialized = false;
@@ -295,7 +283,6 @@ private:
 
     // Methods:
 
-    void setActiveCamera(const Camera* camera);
     void setDirectionalLighting(const glm::vec3& direction, const glm::vec3& intensity);
 
     void addPointLight(const glm::vec3& position, const glm::vec3& intensity, bool shadowMap);
@@ -307,9 +294,10 @@ private:
     //void fillCallBucket(CallBucket& bucket, const std::vector<InstanceList>& instanceLists, size_t numInstances, const Scene* pScene, glm::mat4 globalMatrix, bool useNormalsMatrix);
     //void fillCallBucket(CallBucket& bucket, const std::list<CallHeader>& headers, const std::list<std::list<uint32_t>> instanceLists, const Scene* pScene, glm::mat4 globalMatrix, bool useNormalsMatrix);
     void fillCallBucketInstanceBuffer(CallBucket& bucket);
+    void updateInstanceBuffers();
 
-    void computeMatrices();
-    void computeShadowMapMatrices(const glm::vec3& sceneAABBMin, const glm::vec3& sceneAABBMax);
+    void computeMatrices(const Camera* pCamera);
+    void computeShadowMapMatrices(const glm::vec3& sceneAABBMin, const glm::vec3& sceneAABBMax, const Camera* pCamera);
     void computePointLightShadowMatrices();
 
     // it do what it say
@@ -337,10 +325,10 @@ private:
     void initBloom();
 
 
-    static int computeFrustumCulling(const glm::mat4& frustumMatrix, const std::vector<Renderable>& renderablesIn, std::vector<uint32_t>& toRenderIndices);
-    static int computeFrustumCulling(const glm::mat4& frustumMatrix, const std::vector<Renderable>& renderablesIn, std::vector<bool>& cullResults);
-    static int computeSphereCulling(const glm::vec3& position, float radius, const std::vector<Renderable>& renderablesIn, std::vector<uint32_t>& toRenderIndices);
-    static int computeSphereCulling(const glm::vec3& position, float radius, const std::vector<Renderable>& renderablesIn, std::vector<bool>& cullResults);
+    //static int computeFrustumCulling(const glm::mat4& frustumMatrix, const std::vector<Renderable>& renderablesIn, std::vector<uint32_t>& toRenderIndices);
+    //static int computeFrustumCulling(const glm::mat4& frustumMatrix, const std::vector<Renderable>& renderablesIn, std::vector<bool>& cullResults);
+    //static int computeSphereCulling(const glm::vec3& position, float radius, const std::vector<Renderable>& renderablesIn, std::vector<uint32_t>& toRenderIndices);
+    //static int computeSphereCulling(const glm::vec3& position, float radius, const std::vector<Renderable>& renderablesIn, std::vector<bool>& cullResults);
 
 
     struct FillCallBucketParam {
@@ -352,12 +340,12 @@ private:
         bool hasSkinningMatrices;
     };
 
-    struct FillInstanceBuffersParam {
+    /*struct FillInstanceBuffersParam {
         Renderer* pRenderer;
         Window* pWindow;
         std::vector<CallBucket*> pBuckets;
         size_t nBuckets;
-    };
+    };*/
 
     struct BuildInstanceListsParam {
         InstanceListBuilder* pListBuilder;
@@ -374,19 +362,19 @@ private:
     std::vector<FillCallBucketParam> m_fillPointShadowCallBucketParams;
     std::vector<FillCallBucketParam> m_fillSkinnedPointShadowCallBucketParams;
 
-    FillInstanceBuffersParam m_fillInstanceBuffersParam;
+    //FillInstanceBuffersParam m_fillInstanceBuffersParam;
 
     BuildInstanceListsParam m_buildDefaultListsParam;
     std::vector<BuildInstanceListsParam> m_buildShadowMapListsParams;
     std::vector<BuildInstanceListsParam> m_buildPointShadowMapListsParams;
 
-    static void renderJob(uintptr_t param);
+    JobScheduler::CounterHandle m_listBuildersCounter = JobScheduler::COUNTER_NULL;
+
 
     static void dispatchListBuilderJobs(uintptr_t param);
     static void dispatchCallBucketJobs(uintptr_t param);
 
     static void fillCallBucketJob(uintptr_t param);
-    static void fillInstanceBuffersJob(uintptr_t param);
     static void buildInstanceListsJob(uintptr_t param);
 
 };

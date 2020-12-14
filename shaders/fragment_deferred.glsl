@@ -8,7 +8,7 @@ uniform sampler2DArray shadowMap;
 
 uniform mat4 viewToLightMatrix;
 uniform mat4 shadowProjectionMatrices[MAX_CASCADES];
-uniform int numShadowCascades;
+uniform uint numShadowCascades;
 uniform float cascadeSplitDepths[MAX_CASCADES];
 uniform float cascadeBlurRanges[MAX_CASCADES];
 uniform float lightBleedCorrectionBias;

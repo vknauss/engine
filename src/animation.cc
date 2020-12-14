@@ -24,6 +24,7 @@ Animation::JointTransformSample& Animation::createJointTransformSample(size_t jo
     return *iit;
 }
 
+//#include <iostream>
 void Animation::addPoseToSkeleton(float time, Skeleton* pSkeleton) {
     if(m_loop) {
         time = getLoopTime(time);
@@ -40,9 +41,12 @@ void Animation::addPoseToSkeleton(float time, Skeleton* pSkeleton) {
 
                 joint->setLocalPoseOffset(joint->getLocalPoseOffset() + jt.offset);
                 joint->setLocalPoseRotation(jt.rotation); // * joint->getLocalPoseRotation());
+
+                //std::cout << "glitched?" << std::endl;
             } else if(nit->sampleTime > time) {
 
                 float mix = (time - it->sampleTime) / (nit->sampleTime - it->sampleTime);
+                //if (mix < 0.0f || mix > 1.0f) std::cout << "whoah! " << mix << " " << time << std::endl;
                 JointTransformSample &jt0 = *it, &jt1 = *nit;
 
                 glm::vec3 offset = glm::mix(jt0.offset, jt1.offset, mix);

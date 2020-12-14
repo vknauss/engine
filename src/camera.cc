@@ -3,8 +3,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 Camera::Camera(float fov, float aspect, float near, float far) :
-    m_fov(fov), m_aspect(aspect), m_nearPlane(near), m_farPlane(far),
-    m_position(0, 0, 0), m_direction(0, 0, -1), m_up(0, 1, 0) {
+    m_position(0, 0, 0), m_direction(0, 0, -1), m_up(0, 1, 0),
+    m_fov(fov), m_aspect(aspect), m_nearPlane(near), m_farPlane(far) {
 }
 
 Camera::Camera() :

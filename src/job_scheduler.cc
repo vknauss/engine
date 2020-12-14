@@ -11,11 +11,11 @@
 #include <iostream>
 #include <random>
 
-//#define SCHEDULER_DEBUG
-#ifdef SCHEDULER_DEBUG
-#define DEBUG_PRINT(x) {std::stringstream buf; buf << x << std::endl; std::cout << buf.str();}
+//#define VKJOB_DEBUG
+#ifdef VKJOB_DEBUG
+#define VKJ_DEBUG_PRINT(x) {std::stringstream buf; buf << x << std::endl; std::cout << buf.str();}
 #else
-#define DEBUG_PRINT(x)
+#define VKJ_DEBUG_PRINT(x)
 #endif // SHEDULER_DEBUG
 
 void JobScheduler::workerThreadMain(JobScheduler* pScheduler, uint32_t id) {
@@ -25,17 +25,17 @@ void JobScheduler::workerThreadMain(JobScheduler* pScheduler, uint32_t id) {
 
         {
             std::unique_lock<std::mutex> lock(pScheduler->m_threadJobQueues[id].mtx);
-            DEBUG_PRINT("thread " << id << " checking for work: " << pScheduler->m_threadJobQueues[id].workReady)
+            VKJ_DEBUG_PRINT("thread " << id << " checking for work: " << pScheduler->m_threadJobQueues[id].workReady)
             while (!pScheduler->m_threadJobQueues[id].workReady) {
 
-                DEBUG_PRINT("thread " << id << " going to sleep")
+                VKJ_DEBUG_PRINT("thread " << id << " going to sleep")
 
                 pScheduler->m_threadJobQueues[id].cv.wait(lock);
 
-                DEBUG_PRINT("thread " << id << " woke up ")
+                VKJ_DEBUG_PRINT("thread " << id << " woke up ")
             }
 
-            DEBUG_PRINT("thread " << id << " making sure work is legit")
+            VKJ_DEBUG_PRINT("thread " << id << " making sure work is legit")
 
             for (; priority != JOB_PRIORITY_MAX_ENUM; priority++) {
                 if (!pScheduler->m_threadJobQueues[id].priorityLevelQueues[priority].empty()) {
@@ -46,7 +46,7 @@ void JobScheduler::workerThreadMain(JobScheduler* pScheduler, uint32_t id) {
             }
 
             if (priority == JOB_PRIORITY_MAX_ENUM) {
-                DEBUG_PRINT("thread " << id << " letting us know its unemployed")
+                VKJ_DEBUG_PRINT("thread " << id << " letting us know its unemployed")
 
                 pScheduler->m_threadJobQueues[id].workReady = false;
                 pScheduler->m_threadJobQueues[id].cv.notify_all();
@@ -56,12 +56,12 @@ void JobScheduler::workerThreadMain(JobScheduler* pScheduler, uint32_t id) {
         if (priority != JOB_PRIORITY_MAX_ENUM) {
             //std::cout << "decl: " << (uintptr_t)(decl.pFunction) <<  " " << (uintptr_t)(decl.param) <<  " " << decl.numSignalCounters << std::endl;
 
-            DEBUG_PRINT("running job (t " << id << ")")
+            VKJ_DEBUG_PRINT("running job (t " << id << ")")
             assert(decl.pFunction != nullptr);
 
             decl.pFunction(decl.param);
 
-            DEBUG_PRINT("done with job (t " << id << ")")
+            VKJ_DEBUG_PRINT("done with job (t " << id << ")")
 
             if (decl.numSignalCounters != 0) {
                 for (int i = 0 ; i < decl.numSignalCounters; ++i) {
@@ -72,7 +72,7 @@ void JobScheduler::workerThreadMain(JobScheduler* pScheduler, uint32_t id) {
                 }
             }
 
-            DEBUG_PRINT("thread " << id << " decremented counters")
+            VKJ_DEBUG_PRINT("thread " << id << " decremented counters")
         } /*else {
             // Save some cycles for the rest of us!
             //std::this_thread::sleep_for(std::chrono::microseconds(10));
@@ -113,7 +113,7 @@ void JobScheduler::joinThreads() {
         }
         m_workerThreads[i].join();
 
-        DEBUG_PRINT("worker thread " << i << " joined")
+        VKJ_DEBUG_PRINT("worker thread " << i << " joined")
 
     }
 
@@ -157,7 +157,7 @@ void JobScheduler::enqueueJob(JobScheduler::JobDeclaration decl) {
                 std::lock_guard<std::mutex> lock(m_counters[counter].mtx);
                 ++m_counters[counter].count;
 
-                DEBUG_PRINT("Counter " << (m_counters[counter].hasID ? m_counters[counter].id : std::to_string(counter)) << " incremented. Value: " << m_counters[counter].count)
+                VKJ_DEBUG_PRINT("Counter " << (m_counters[counter].hasID ? m_counters[counter].id : std::to_string(counter)) << " incremented. Value: " << m_counters[counter].count)
 
             }
         }
@@ -171,13 +171,13 @@ void JobScheduler::enqueueJob(JobScheduler::JobDeclaration decl) {
 
     std::lock_guard<std::mutex> lock(m_threadJobQueues[thread].mtx);
 
-    DEBUG_PRINT("adding job to thread " << thread << " q " << decl.priority)
+    VKJ_DEBUG_PRINT("adding job to thread " << thread << " q " << decl.priority)
 
     m_threadJobQueues[thread].priorityLevelQueues[decl.priority].push(decl);
     m_threadJobQueues[thread].workReady = true;
     m_threadJobQueues[thread].cv.notify_all();
 
-    DEBUG_PRINT("Thread " << thread << " notified")
+    VKJ_DEBUG_PRINT("Thread " << thread << " notified")
 
 }
 
@@ -237,7 +237,7 @@ void JobScheduler::enqueueJobs(uint32_t count, JobScheduler::JobDeclaration* pDe
                 std::lock_guard<std::mutex> lock(m_counters[kv.first].mtx);
                 m_counters[kv.first].count += kv.second;
 
-                DEBUG_PRINT("Counter " << kv.first << " incremented. Value: " << m_counters[kv.first].count)
+                VKJ_DEBUG_PRINT("Counter " << kv.first << " incremented. Value: " << m_counters[kv.first].count)
 
             }
         }
@@ -256,7 +256,7 @@ void JobScheduler::enqueueJobs(uint32_t count, JobScheduler::JobDeclaration* pDe
         //if ((i+1) * num > count - waitCount) num = (count - waitCount) - i * num;
         if (num == 0) break;
 
-        DEBUG_PRINT("Thread " << thread << " gets " << num << " jobs")
+        VKJ_DEBUG_PRINT("Thread " << thread << " gets " << num << " jobs")
 
         std::lock_guard<std::mutex> lock(m_threadJobQueues[thread].mtx);
         for (uint32_t j = ind, cct = 0; j < count && cct < num && ind + cct < count - waitCount; ++j) {
@@ -268,13 +268,13 @@ void JobScheduler::enqueueJobs(uint32_t count, JobScheduler::JobDeclaration* pDe
         m_threadJobQueues[thread].workReady = true;
         m_threadJobQueues[thread].cv.notify_all();
 
-        DEBUG_PRINT("Thread " << thread << " notified")
+        VKJ_DEBUG_PRINT("Thread " << thread << " notified")
 
         ind += num;
         if (ind >= count) break;
     }
 
-    DEBUG_PRINT("Assigned " << ind << " out of " << count << " jobs. Good nuff? " << waitCount << " are supposed to wait")
+    VKJ_DEBUG_PRINT("Assigned " << ind << " out of " << count << " jobs. Good nuff? " << waitCount << " are supposed to wait")
 
 }
 
@@ -326,9 +326,9 @@ void JobScheduler::decrementCounter(JobScheduler::CounterHandle handle) {
                 kv->second.clear();
             }
 
-            DEBUG_PRINT("Counter " << (m_counters[handle].hasID ? m_counters[handle].id : std::to_string((int)handle)) << " hit zero. Enqueuing " << waitJobs.size() << " jobs.")
+            VKJ_DEBUG_PRINT("Counter " << (m_counters[handle].hasID ? m_counters[handle].id : std::to_string((int)handle)) << " hit zero. Enqueuing " << waitJobs.size() << " jobs.")
         } else {
-            DEBUG_PRINT("Counter " << (m_counters[handle].hasID ? m_counters[handle].id : std::to_string((int)handle)) << " decremented. Value: " << m_counters[handle].count)
+            VKJ_DEBUG_PRINT("Counter " << (m_counters[handle].hasID ? m_counters[handle].id : std::to_string((int)handle)) << " decremented. Value: " << m_counters[handle].count)
         }
     }
     if (!waitJobs.empty()) enqueueJobs(waitJobs.size(), waitJobs.data(), true);

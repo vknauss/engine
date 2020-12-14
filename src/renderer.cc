@@ -2,66 +2,77 @@
 
 #include <algorithm>
 #include <numeric>
-#include <iostream>
-#include <sstream>
 
 #include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/random.hpp>
-#include <glm/gtx/transform.hpp>
-
-#include <glm/gtx/string_cast.hpp>
 
 #include "math_util.h"
 #include "mesh_builder.h"
 
-#include "frustum_culler.h"
-#include "instance_list_builder.h"
-
-//#define VKRENDER_DEBUG
+#define VKRENDER_DEBUG
 #ifdef VKRENDER_DEBUG
+#include <iostream>
+#include <sstream>
+
+#define VKR_DEBUG_PRINT(X) { std::stringstream sstr; sstr << X << std::endl; std::cout << sstr.str(); std::flush(std::cout); }
+#define VKR_DEBUG_CHECK_ERROR(X) X; checkError(#X);
+
+//#define VKRENDER_DEBUG_PRINT_RUNTIME_ENABLED
+#ifdef VKRENDER_DEBUG_PRINT_RUNTIME_ENABLED
 #include <GLFW/glfw3.h>
-#endif // VKRENDER_DEBUG
+#define VKR_DEBUG_PRINT_RUNTIME(X) { uint64_t ticks = glfwGetTimerValue(); X; VKR_DEBUG_PRINT("Call " << #X << " runtime: " << (1000. * (glfwGetTimerValue()-ticks)/glfwGetTimerFrequency()) << " ms") }
+#else
+#define VKR_DEBUG_PRINT_RUNTIME(X) X;
+#endif // VKRENDER_DEBUG_PRINT_RUNTIME_ENABLED
 
+#define VKR_DEBUG_CALL(X) VKR_DEBUG_PRINT_RUNTIME(X); checkError(#X);
 
-void checkError() {
+void checkError(const std::string& callString) {
     GLenum err = glGetError();
-    std::stringstream sstr;
     if (err) {
-        sstr << "GL Error: ";
+        std::string str = "GL Error after call " + callString + ": ";
         switch(err) {
         case GL_INVALID_ENUM:
-            sstr << "GL_INVALID_ENUM" << std::endl;
+            str += "GL_INVALID_ENUM";
             break;
         case GL_INVALID_VALUE:
-            sstr << "GL_INVALID_VALUE" << std::endl;
+            str += "GL_INVALID_VALUE";
             break;
 
         case GL_INVALID_OPERATION:
-            sstr << "GL_INVALID_OPERATION" << std::endl;
+            str += "GL_INVALID_OPERATION";
             break;
 
         case GL_INVALID_FRAMEBUFFER_OPERATION:
-            sstr << "GL_INVALID_FRAMEBUFFER_OPERATION" << std::endl;
+            str += "GL_INVALID_FRAMEBUFFER_OPERATION";
             break;
 
         case GL_OUT_OF_MEMORY:
-            sstr << "GL_OUT_OF_MEMORY" << std::endl;
+            str += "GL_OUT_OF_MEMORY";
             break;
 
         case GL_STACK_UNDERFLOW:
-            sstr << "GL_STACK_UNDERFLOW" << std::endl;
+            str += "GL_STACK_UNDERFLOW";
             break;
 
         case GL_STACK_OVERFLOW:
-            sstr << "GL_STACK_OVERFLOW" << std::endl;
+            str += "GL_STACK_OVERFLOW";
             break;
         default :
-            sstr << "Unknown error " << err << std::endl;
+            str += "Unknown error " + std::to_string(err);
             break;
         }
-        std::cout << sstr.str();
+        VKR_DEBUG_PRINT(str)
     }
 }
+#else
+
+#define VKR_DEBUG_PRINT(X)
+#define VKR_DEBUG_CHECK_ERROR(X) X;
+#define VKR_DEBUG_CALL(X) X;
+
+#endif // VKRENDER_DEBUG
 
 
 Renderer::Renderer(JobScheduler* pScheduler) : m_pScheduler(pScheduler) {
@@ -70,45 +81,9 @@ Renderer::Renderer(JobScheduler* pScheduler) : m_pScheduler(pScheduler) {
 Renderer::~Renderer() {
 }
 
-void Renderer::setParameters(const RendererParameters& parameters) {
-    RendererParameters oldParameters = m_parameters;
+void Renderer::init(const RendererParameters& parameters) {
     m_parameters = parameters;
 
-    if(m_isInitialized) {
-        // Changing some parameters will require updating resources like shaders or buffers
-        // Don't want to naively assume we need to change all, so check the new and old
-        if(m_parameters.enableMSAA != oldParameters.enableMSAA) {
-            initDeferredPass();
-            initGBuffer();
-            initSSAO();
-            if(m_isViewportInitialized) setViewport(m_viewportWidth, m_viewportHeight);
-        }
-
-        if(m_parameters.shadowMapResolution != oldParameters.shadowMapResolution ||
-            m_parameters.shadowMapNumCascades != oldParameters.shadowMapNumCascades ||
-            m_parameters.shadowMapFilterResolution != oldParameters.shadowMapFilterResolution)
-        {
-            initShadowMap();
-        }
-
-        if(m_parameters.maxPointLightShadowMaps != oldParameters.maxPointLightShadowMaps ||
-            m_parameters.pointLightShadowMapResolution != oldParameters.pointLightShadowMapResolution)
-        {
-            initPointLightShadowMaps();
-        }
-
-        if(m_parameters.maxSkinningBones != oldParameters.maxSkinningBones) {
-            m_skinningMatrices.resize(m_parameters.maxSkinningBones);
-            m_skinningMatricesIT.resize(m_parameters.maxSkinningBones);
-        }
-
-        if(m_parameters.numBloomLevels > oldParameters.numBloomLevels) {
-            initBloom();
-        }
-    }
-}
-
-void Renderer::init() {
     m_fullScreenFilterShader.linkShaderFiles("shaders/vertex_fs.glsl", "shaders/fragment_filter.glsl");
     m_horizontalFilterShader.linkShaderFiles("shaders/vertex_fs.glsl", "shaders/fragment_filter_horizontal.glsl");
     m_fullScreenShader.linkShaderFiles("shaders/vertex_fs.glsl", "shaders/fragment_fstex.glsl");
@@ -122,6 +97,7 @@ void Renderer::init() {
     initSSAO();
     initBloom();
 
+    setViewport(m_parameters.initialWidth, m_parameters.initialHeight);
 
     // TODO: move this block
     {
@@ -132,7 +108,6 @@ void Renderer::init() {
         m_pointLightSphere.createIndexBuffer(sphereMeshData.indices.size(), sphereMeshData.indices.data());
     }
 
-
     // OpenGL context settings
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -142,9 +117,7 @@ void Renderer::init() {
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
-    // Matrix palette for skinning
-    m_skinningMatrices.resize(m_parameters.maxSkinningBones);
-    m_skinningMatricesIT.resize(m_parameters.maxSkinningBones);
+    m_listBuildersCounter = m_pScheduler->getFreeCounter();
 
     m_isInitialized = true;
 }
@@ -157,7 +130,7 @@ void Renderer::cleanup() {
     m_bloomTextures.clear();
 
     // Point light shadow maps
-    for (int i = 0; i < m_parameters.maxPointLightShadowMaps; ++i) {
+    for (size_t i = 0; i < m_pointLightShadowMaps.size(); ++i) {
         if (m_pointLightShadowMaps[i]) delete m_pointLightShadowMaps[i];
         if (m_pointLightShadowDepthMaps[i]) delete m_pointLightShadowDepthMaps[i];
     }
@@ -198,15 +171,12 @@ void Renderer::cleanup() {
     }
     m_pointLightShadowCallBucketsSkinned.clear();
     m_pointLightShadowCallBuckets.clear();
+
+    m_isInitialized = false;
 }
 
-void Renderer::setActiveCamera(const Camera* camera) {
-    m_pActiveCamera = camera;
-}
 
-void Renderer::setViewport(int width, int height) {
-    if(!m_isInitialized) throw std::runtime_error("Renderer must be initialized before viewport can be set.");
-
+void Renderer::setViewport(uint32_t width, uint32_t height) {
     m_viewportWidth = width;
     m_viewportHeight = height;
 
@@ -229,32 +199,17 @@ void Renderer::setViewport(int width, int height) {
     m_sceneRenderLayer.setTextureAttachment(0, &m_sceneTexture);
 
     // Resize HDR bloom textures
-    /*TextureParameters bloomTextureParameters = m_hdrBloomTexture[0].getParameters();
+    TextureParameters bloomTextureParameters = m_bloomTextures[0]->getParameters();
     bloomTextureParameters.width = m_viewportWidth;
     bloomTextureParameters.height = m_viewportHeight;
-
-    m_hdrBloomTexture[0].setParameters(bloomTextureParameters);
-    m_hdrBloomTexture[0].allocateData(nullptr);
-    m_hdrBloomTexture[1].setParameters(bloomTextureParameters);
-    m_hdrBloomTexture[1].allocateData(nullptr);
-
-    m_bloomRenderLayer.setTextureAttachment(0, &m_hdrBloomTexture[0]);
-    m_bloomRenderLayer.setTextureAttachment(1, &m_hdrBloomTexture[1]);*/
-
-    if(m_parameters.numBloomLevels > 0) {
-        TextureParameters bloomTextureParameters = m_bloomTextures[0]->getParameters();
-        bloomTextureParameters.width = m_viewportWidth;
-        bloomTextureParameters.height = m_viewportHeight;
-        for(int i = 0; i < m_parameters.numBloomLevels; ++i) {
-            m_bloomTextures[2*i  ]->setParameters(bloomTextureParameters);
-            m_bloomTextures[2*i+1]->setParameters(bloomTextureParameters);
-            m_bloomTextures[2*i  ]->allocateData(nullptr);
-            m_bloomTextures[2*i+1]->allocateData(nullptr);
-            if(bloomTextureParameters.width  > 1) bloomTextureParameters.width  /= 2;
-            if(bloomTextureParameters.height > 1) bloomTextureParameters.height /= 2;
-        }
+    for(uint32_t i = 0; i < m_parameters.numBloomLevels; ++i) {
+        m_bloomTextures[2*i  ]->setParameters(bloomTextureParameters);
+        m_bloomTextures[2*i+1]->setParameters(bloomTextureParameters);
+        m_bloomTextures[2*i  ]->allocateData(nullptr);
+        m_bloomTextures[2*i+1]->allocateData(nullptr);
+        if(bloomTextureParameters.width  > 1) bloomTextureParameters.width  /= 2;
+        if(bloomTextureParameters.height > 1) bloomTextureParameters.height /= 2;
     }
-
 
     // Resize GBuffer textures
     TextureParameters gBufferTextureParameters = m_gBufferPositionViewSpaceTexture.getParameters();
@@ -332,22 +287,22 @@ void Renderer::addPointLight(const glm::vec3& position, const glm::vec3& intensi
             if(m_inUsePointLightShadowMaps == m_numPointLightShadowMaps) {  // we do need to make a new one
 //                addPointLightShadowMap();
             }
-            m_pointLightShadowMapLightIndices[m_inUsePointLightShadowMaps] = (int) m_pointLightShadowMapIndices.size();
+            m_pointLightShadowMapLightIndices[m_inUsePointLightShadowMaps] = static_cast<uint32_t>(m_pointLightShadowMapIndices.size());
             m_pointLightShadowMapLightKeys[m_inUsePointLightShadowMaps] = key;
-            m_pointLightShadowMapIndices.push_back(m_inUsePointLightShadowMaps);
+            m_pointLightShadowMapIndices.push_back(static_cast<int>(m_inUsePointLightShadowMaps));
             ++m_inUsePointLightShadowMaps;
         } else {  // we do need to steal one (if possible)
             float minKey = key;
             int minInd = -1;
-            for(int i = 0; i < m_parameters.maxPointLightShadowMaps; ++i) {
+            for(uint32_t i = 0; i < m_parameters.maxPointLightShadowMaps; ++i) {
                 if(m_pointLightShadowMapLightKeys[i] < minKey) {
                     minKey = m_pointLightShadowMapLightKeys[i];
-                    minInd = i;
+                    minInd = static_cast<int>(i);
                 }
             }
             if(minInd > -1) {
                 m_pointLightShadowMapIndices[m_pointLightShadowMapLightIndices[minInd]] = -1;
-                m_pointLightShadowMapLightIndices[minInd] = (int) m_pointLightShadowMapIndices.size();
+                m_pointLightShadowMapLightIndices[minInd] = static_cast<uint32_t>(m_pointLightShadowMapIndices.size());
                 m_pointLightShadowMapLightKeys[minInd] = key;
                 m_pointLightShadowMapIndices.push_back(minInd);
             } else {
@@ -422,18 +377,17 @@ void Renderer::fillCallBucketJob(uintptr_t param) {
     }
 
     size_t transformSize = useNormalsMatrix ? 32 : 16;
-    size_t instanceNumTransforms;
+    size_t numInstanceTransforms;
 
-    /*if (!hasSkinningMatrices) {
-        instanceNumTransforms = 1;
+    if (!hasSkinningMatrices) {
+        numInstanceTransforms = numInstances;
     } else {
-        instanceNumTransforms = std::accumulate(instanceLists.begin(), instanceLists.end(), size_t(0),
+        numInstanceTransforms = std::accumulate(instanceLists.begin(), instanceLists.end(), size_t(0),
             [] (size_t acc, const InstanceList& il) {
-                return acc + il.getModel()->getSkeletonDescription()->getNumJoints(); });
-    }*/
-    instanceNumTransforms = hasSkinningMatrices ? 80 : 1;
+                return acc + il.getModel()->getSkeletonDescription()->getNumJoints() * il.getNumInstances(); });
+    }
 
-    bucket.instanceTransformFloats.resize(numInstances * instanceNumTransforms * transformSize);
+    bucket.instanceTransformFloats.resize(numInstanceTransforms * transformSize);
     bucket.numInstances = numInstances;
 
     size_t transformBufferOffset = 0;
@@ -507,16 +461,34 @@ void Renderer::fillCallBucketInstanceBuffer(CallBucket& bucket) {
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float)*bucket.instanceTransformFloats.size(), bucket.instanceTransformFloats.data(), GL_STREAM_DRAW);
 }
 
-void Renderer::fillInstanceBuffersJob(uintptr_t param) {
-    FillInstanceBuffersParam* pParam = reinterpret_cast<FillInstanceBuffersParam*>(param);
-
-    pParam->pWindow->acquireContext();
-
-    for (size_t i = 0; i < pParam->nBuckets; ++i) {
-        pParam->pRenderer->fillCallBucketInstanceBuffer(*pParam->pBuckets[i]);
+void Renderer::updateInstanceBuffers() {
+    if (m_defaultCallBucket.numInstances > 0) {
+        fillCallBucketInstanceBuffer(m_defaultCallBucket);
     }
 
-    pParam->pWindow->releaseContext();
+    if (m_skinnedCallBucket.numInstances > 0) {
+        fillCallBucketInstanceBuffer(m_skinnedCallBucket);
+    }
+
+    for (size_t i = 0; i < 6 * m_numPointLightShadowMaps; ++i) {
+        if (m_pointLightShadowCallBuckets[i].numInstances > 0) {
+            fillCallBucketInstanceBuffer(m_pointLightShadowCallBuckets[i]);
+        }
+
+        if (m_pointLightShadowCallBucketsSkinned[i].numInstances > 0) {
+            fillCallBucketInstanceBuffer(m_pointLightShadowCallBucketsSkinned[i]);
+        }
+    }
+
+    for (size_t i = 0; i < m_parameters.shadowMapNumCascades; ++i) {
+        if (m_shadowMapCallBuckets[i].numInstances > 0) {
+            fillCallBucketInstanceBuffer(m_shadowMapCallBuckets[i]);
+        }
+
+        if (m_skinnedShadowMapCallBuckets[i].numInstances > 0) {
+            fillCallBucketInstanceBuffer(m_skinnedShadowMapCallBuckets[i]);
+        }
+    }
 }
 
 void Renderer::buildInstanceListsJob(uintptr_t param) {
@@ -533,116 +505,33 @@ void Renderer::buildInstanceListsJob(uintptr_t param) {
     }
 }
 
-#ifdef VKRENDER_DEBUG
 void Renderer::render() {
-    if(!m_isInitialized) throw std::runtime_error("Renderer must be initialized before rendering.");
-    if(!m_isViewportInitialized) throw std::runtime_error("Viewport must be set before rendering.");
-
-    uint64_t beginTicks = glfwGetTimerValue();
-    uint64_t bbeginTicks = beginTicks;
-    uint64_t ticks = beginTicks;
-
-    uint64_t dlShadowTicks = 0,
-        dlShadowFilterTicks = 0,
-        plShadowTicks = 0,
-        gbufferTicks = 0,
-        ssaoTicks = 0,
-        deferredTicks = 0,
-        bloomTicks = 0,
-        cmpTicks = 0;
+    VKR_DEBUG_CALL(renderGBuffer())
 
     if(m_directionalLightEnabled) {
-        renderShadowMap();
+        VKR_DEBUG_CALL(renderShadowMap())
 
-        ticks = glfwGetTimerValue();
-        dlShadowTicks = ticks - beginTicks;
-        beginTicks = ticks;
-
-        if(m_parameters.enableShadowFiltering) filterShadowMap();
-
-        ticks = glfwGetTimerValue();
-        dlShadowFilterTicks = ticks - beginTicks;
-        beginTicks = ticks;
+        if(m_parameters.enableShadowFiltering) {
+            VKR_DEBUG_CALL(filterShadowMap())
+        }
     }
 
-    if(m_inUsePointLightShadowMaps > 0) renderPointLightShadows();
-
-    ticks = glfwGetTimerValue();
-    plShadowTicks = ticks - beginTicks;
-    beginTicks = ticks;
-
-    renderGBuffer();
-
-    ticks = glfwGetTimerValue();
-    gbufferTicks = ticks - beginTicks;
-    beginTicks = ticks;
-
-    if(m_parameters.enableSSAO) renderSSAOMap();
-
-    ticks = glfwGetTimerValue();
-    ssaoTicks = ticks - beginTicks;
-    beginTicks = ticks;
-
-    renderDeferredPass();
-
-    ticks = glfwGetTimerValue();
-    deferredTicks = ticks - beginTicks;
-    beginTicks = ticks;
-
-    if(m_parameters.numBloomLevels > 0) renderBloom();
-
-    ticks = glfwGetTimerValue();
-    bloomTicks = ticks - beginTicks;
-    beginTicks = ticks;
-
-    renderCompositePass();
-
-    ticks = glfwGetTimerValue();
-    cmpTicks = ticks - beginTicks;
-    beginTicks = ticks;
-
-    static const double scl = 1000.0 / (double) glfwGetTimerFrequency();
-    std::cout << "Times: "
-        << "\n\tTotal: " << ((ticks - bbeginTicks) * scl)
-        << "\n\tDL shadow render: " << (dlShadowTicks * scl)
-        << "\n\tDL shadow filter: " << (dlShadowFilterTicks * scl)
-        << "\n\tPL shadows: " << (plShadowTicks * scl)
-        << "\n\tGBuffer: " << (gbufferTicks * scl)
-        << "\n\tSSAO: " << (ssaoTicks * scl)
-        << "\n\tDeferred (lighting): " << (deferredTicks * scl)
-        << "\n\tBloom: " << (bloomTicks * scl)
-        << "\n\tComposite: " << (cmpTicks * scl)
-    << std::endl;
-
-}
-
-#else
-
-void Renderer::render() {
-    if(!m_isInitialized) throw std::runtime_error("Renderer must be initialized before rendering.");
-    if(!m_isViewportInitialized) throw std::runtime_error("Viewport must be set before rendering.");
-
-    renderGBuffer();
-
-    if(m_directionalLightEnabled) {
-        renderShadowMap();
-
-        if(m_parameters.enableShadowFiltering) filterShadowMap();
+    if(m_inUsePointLightShadowMaps > 0) {
+        VKR_DEBUG_CALL(renderPointLightShadows())
     }
 
-    if(m_inUsePointLightShadowMaps > 0) renderPointLightShadows();
+    if(m_parameters.enableSSAO) {
+        VKR_DEBUG_CALL(renderSSAOMap())
+    }
 
-    if(m_parameters.enableSSAO) renderSSAOMap();
+    VKR_DEBUG_CALL(renderDeferredPass())
 
-    renderDeferredPass();
+    if(m_parameters.numBloomLevels > 0) {
+        VKR_DEBUG_CALL(renderBloom())
+    }
 
-    if(m_parameters.numBloomLevels > 0)
-        renderBloom();
-
-    renderCompositePass();
+    VKR_DEBUG_CALL(renderCompositePass())
 }
-
-#endif // VKRENDER_DEBUG
 
 void Renderer::dispatchListBuilderJobs(uintptr_t param) {
     RendererJobParam* pParam = reinterpret_cast<RendererJobParam*>(param);
@@ -660,14 +549,14 @@ void Renderer::dispatchListBuilderJobs(uintptr_t param) {
         pRenderer->m_buildDefaultListsParam.pScene = pParam->pScene;
 
         decls[numDecls].numSignalCounters = 1;
-        decls[numDecls].signalCounters[0] = pParam->pScheduler->getCounterByID("lb");
+        decls[numDecls].signalCounters[0] = pRenderer->m_listBuildersCounter;
         decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_buildDefaultListsParam);
         decls[numDecls].pFunction = buildInstanceListsJob;
         ++numDecls;
     }
 
     if(pRenderer->m_inUsePointLightShadowMaps > 0) {
-        for(int i = 0; i < 6 * pRenderer->m_inUsePointLightShadowMaps; ++i) {
+        for(uint32_t i = 0; i < 6 * pRenderer->m_inUsePointLightShadowMaps; ++i) {
             pRenderer->m_buildPointShadowMapListsParams[i].filterNonShadowCasters = true;
             pRenderer->m_buildPointShadowMapListsParams[i].frustumMatrix = pRenderer->m_pointLightShadowMapMatrices[i];
             pRenderer->m_buildPointShadowMapListsParams[i].pCuller = &pRenderer->m_pointShadowFrustumCullers[i];
@@ -675,7 +564,7 @@ void Renderer::dispatchListBuilderJobs(uintptr_t param) {
             pRenderer->m_buildPointShadowMapListsParams[i].pScene = pParam->pScene;
 
             decls[numDecls].numSignalCounters = 1;
-            decls[numDecls].signalCounters[0] = pParam->pScheduler->getCounterByID("lb");
+            decls[numDecls].signalCounters[0] = pRenderer->m_listBuildersCounter;
             decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_buildPointShadowMapListsParams[i]);
             decls[numDecls].pFunction = buildInstanceListsJob;
             ++numDecls;
@@ -683,7 +572,7 @@ void Renderer::dispatchListBuilderJobs(uintptr_t param) {
     }
 
     if(pRenderer->m_directionalLightEnabled) {
-        for(int i = 0; i < pRenderer->m_parameters.shadowMapNumCascades; ++i) {
+        for(uint32_t i = 0; i < pRenderer->m_parameters.shadowMapNumCascades; ++i) {
             pRenderer->m_buildShadowMapListsParams[i].filterNonShadowCasters = true;
             pRenderer->m_buildShadowMapListsParams[i].frustumMatrix = pRenderer->m_shadowMapProjectionMatrices[i] * pRenderer->m_lightViewMatrix;
             pRenderer->m_buildShadowMapListsParams[i].pCuller = &pRenderer->m_shadowMapFrustumCullers[i];
@@ -691,7 +580,7 @@ void Renderer::dispatchListBuilderJobs(uintptr_t param) {
             pRenderer->m_buildShadowMapListsParams[i].pScene = pParam->pScene;
 
             decls[numDecls].numSignalCounters = 1;
-            decls[numDecls].signalCounters[0] = pParam->pScheduler->getCounterByID("lb");
+            decls[numDecls].signalCounters[0] = pRenderer->m_listBuildersCounter;
             decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_buildShadowMapListsParams[i]);
             decls[numDecls].pFunction = buildInstanceListsJob;
             ++numDecls;
@@ -707,7 +596,6 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
     Renderer* pRenderer = pParam->pRenderer;
 
     std::vector<JobScheduler::JobDeclaration> decls(2*(1 + pRenderer->m_parameters.shadowMapNumCascades + 6*pRenderer->m_parameters.maxPointLightShadowMaps));
-    pRenderer->m_fillInstanceBuffersParam.pBuckets.resize(decls.size(), nullptr);
     uint32_t numDecls = 0;
 
     if (pRenderer->m_defaultListBuilder.hasNonSkinnedInstances()) {
@@ -721,11 +609,9 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
 
         // Default call bucket job declaration
         decls[numDecls].numSignalCounters = 1;
-        decls[numDecls].signalCounters[0] = pParam->pScheduler->getCounterByID("cb");
+        decls[numDecls].signalCounters[0] = pParam->signalCounterHandle;
         decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillDefaultCallBucketParam);
         decls[numDecls].pFunction = fillCallBucketJob;
-
-        pRenderer->m_fillInstanceBuffersParam.pBuckets[numDecls] = &pRenderer->m_defaultCallBucket;
 
         ++numDecls;
     } else {
@@ -743,11 +629,9 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
 
         // Skinned call bucket job declaration
         decls[numDecls].numSignalCounters = 1;
-        decls[numDecls].signalCounters[0] = pParam->pScheduler->getCounterByID("cb");
+        decls[numDecls].signalCounters[0] = pParam->signalCounterHandle;
         decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillSkinnedCallBucketParam);
         decls[numDecls].pFunction = fillCallBucketJob;
-
-        pRenderer->m_fillInstanceBuffersParam.pBuckets[numDecls] = &pRenderer->m_skinnedCallBucket;
 
         ++numDecls;
     } else {
@@ -757,7 +641,7 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
     // Point Lights
     if(pRenderer->m_inUsePointLightShadowMaps > 0) {
         // 12 Buckets per shadow-enabled light (one skinned and one non-skinned per cube face)
-        for(int i = 0; i < 6 * pRenderer->m_inUsePointLightShadowMaps; ++i) {
+        for(uint32_t i = 0; i < 6 * pRenderer->m_inUsePointLightShadowMaps; ++i) {
             if (pRenderer->m_pointShadowListBuilders[i].hasNonSkinnedInstances()) {
                 pRenderer->m_fillPointShadowCallBucketParams[i].bucket = &pRenderer->m_pointLightShadowCallBuckets[i];
                 pRenderer->m_fillPointShadowCallBucketParams[i].globalMatrix = pRenderer->m_pointLightShadowMapMatrices[i];
@@ -767,11 +651,9 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
                 pRenderer->m_fillPointShadowCallBucketParams[i].hasSkinningMatrices = false;
 
                 decls[numDecls].numSignalCounters = 1;
-                decls[numDecls].signalCounters[0] = pParam->pScheduler->getCounterByID("cb");
+                decls[numDecls].signalCounters[0] = pParam->signalCounterHandle;
                 decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillPointShadowCallBucketParams[i]);
                 decls[numDecls].pFunction = fillCallBucketJob;
-
-                pRenderer->m_fillInstanceBuffersParam.pBuckets[numDecls] = &pRenderer->m_pointLightShadowCallBuckets[i];
 
                 ++numDecls;
             } else {
@@ -787,11 +669,9 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
                 pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].hasSkinningMatrices = true;
 
                 decls[numDecls].numSignalCounters = 1;
-                decls[numDecls].signalCounters[0] = pParam->pScheduler->getCounterByID("cb");
+                decls[numDecls].signalCounters[0] = pParam->signalCounterHandle;
                 decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillSkinnedPointShadowCallBucketParams[i]);
                 decls[numDecls].pFunction = fillCallBucketJob;
-
-                pRenderer->m_fillInstanceBuffersParam.pBuckets[numDecls] = &pRenderer->m_pointLightShadowCallBucketsSkinned[i];
 
                 ++numDecls;
             } else {
@@ -803,7 +683,7 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
     // Directional light (cascaded) shadow maps
     if(pRenderer->m_directionalLightEnabled) {
         // Create job declarations and parameter structs for each shadow cascade level
-        for(int i = 0; i < pRenderer->m_parameters.shadowMapNumCascades; ++i) {
+        for(uint32_t i = 0; i < pRenderer->m_parameters.shadowMapNumCascades; ++i) {
             glm::mat4 frustumMatrix = pRenderer->m_shadowMapProjectionMatrices[i] * pRenderer->m_lightViewMatrix;
             if (pRenderer->m_shadowMapListBuilders[i].hasNonSkinnedInstances()) {
                 pRenderer->m_fillShadowMapCallBucketParams[i].bucket = &pRenderer->m_shadowMapCallBuckets[i];
@@ -814,11 +694,9 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
                 pRenderer->m_fillShadowMapCallBucketParams[i].hasSkinningMatrices = false;
 
                 decls[numDecls].numSignalCounters = 1;
-                decls[numDecls].signalCounters[0] = pParam->pScheduler->getCounterByID("cb");
+                decls[numDecls].signalCounters[0] = pParam->signalCounterHandle;
                 decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillShadowMapCallBucketParams[i]);
                 decls[numDecls].pFunction = fillCallBucketJob;
-
-                pRenderer->m_fillInstanceBuffersParam.pBuckets[numDecls] = &pRenderer->m_shadowMapCallBuckets[i];
 
                 ++numDecls;
             } else {
@@ -834,11 +712,9 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
                 pRenderer->m_fillSkinnedShadowMapCallBucketParams[i].hasSkinningMatrices = true;
 
                 decls[numDecls].numSignalCounters = 1;
-                decls[numDecls].signalCounters[0] = pParam->pScheduler->getCounterByID("cb");
+                decls[numDecls].signalCounters[0] = pParam->signalCounterHandle;
                 decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillSkinnedShadowMapCallBucketParams[i]);
                 decls[numDecls].pFunction = fillCallBucketJob;
-
-                pRenderer->m_fillInstanceBuffersParam.pBuckets[numDecls] = &pRenderer->m_skinnedShadowMapCallBuckets[i];
 
                 ++numDecls;
             } else {
@@ -849,13 +725,9 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
 
     // Enqueue call bucket jobs as a batch
     pParam->pScheduler->enqueueJobs(numDecls, decls.data());
-
-    // This job will be enqueued by the calling function.
-    // It made more sense to partially fill the parameter struct in this job since it depends on which CallBuckets have instances, which is checked in this job.
-    pRenderer->m_fillInstanceBuffersParam.nBuckets = numDecls;
 }
 
-void Renderer::dispatchRenderJobs(uintptr_t param) {
+void Renderer::preRenderJob(uintptr_t param) {
     RendererJobParam* pParam = reinterpret_cast<RendererJobParam*>(param);
 
     Renderer* pRenderer = pParam->pRenderer;
@@ -863,74 +735,47 @@ void Renderer::dispatchRenderJobs(uintptr_t param) {
     JobScheduler* pScheduler = pParam->pScheduler;
 
     assert(pRenderer->m_isInitialized);
+    assert(pScene->getActiveCamera());
 
     // Do some setup first before enqueueing the various sub-dispatch jobs
 
-    pRenderer->setActiveCamera(&(pScene->m_cameras[pScene->m_activeCameraID]));
     pRenderer->setDirectionalLighting(pScene->m_directionalLight.getDirection(), pScene->m_directionalLight.getIntensity());
     pRenderer->m_ambientLightIntensity = pScene->getAmbientLightIntensity();
 
-    pRenderer->computeMatrices();
+    pRenderer->computeMatrices(pScene->getActiveCamera());
 
     // Prepare point lights
     pRenderer->clearPointLights();
-    {
-        // Determine which point lights we need to draw based on their bounding spheres
+
+    // Determine which point lights we need to draw based on their bounding spheres
+    if (pRenderer->m_pointLightBoundingSpheres.size() < pScene->m_pointLights.size()) {
         pRenderer->m_pointLightBoundingSpheres.resize(pScene->m_pointLights.size());
+    }
 
-        for (size_t i = 0; i < pScene->m_pointLights.size(); ++i) {
-            const PointLight& pointLight = pScene->m_pointLights[i];
-            pRenderer->m_pointLightBoundingSpheres[i]
-                .setPosition(pointLight.getPosition())
-                .setRadius(pointLight.getBoundingSphereRadius());
+    for (size_t i = 0; i < pScene->m_pointLights.size(); ++i) {
+        const PointLight& pointLight = pScene->m_pointLights[i];
+        pRenderer->m_pointLightBoundingSpheres[i]
+            .setPosition(pointLight.getPosition())
+            .setRadius(pointLight.getBoundingSphereRadius());
+    }
+
+    pRenderer->m_pointLightFrustumCuller.cullSpheres(
+        pRenderer->m_pointLightBoundingSpheres.data(),
+        pScene->m_pointLights.size(),
+        pRenderer->m_cameraProjectionMatrix * pRenderer->m_cameraViewMatrix);
+
+    for (size_t i = 0; i < pScene->m_pointLights.size(); ++i) {
+        const PointLight& pointLight = pScene->m_pointLights[i];
+        if (pRenderer->m_pointLightFrustumCuller.getCullResults()[i]) {
+            pRenderer->addPointLight(
+                pointLight.getPosition(),
+                pointLight.getIntensity(),
+                pointLight.isShadowMapEnabled());
         }
+    }
 
-        pRenderer->m_pointLightFrustumCuller.cullSpheres(
-            pRenderer->m_pointLightBoundingSpheres.data(),
-            pScene->m_pointLights.size(),
-            pRenderer->m_cameraProjectionMatrix * pRenderer->m_cameraViewMatrix);
-
-        for (size_t i = 0; i < pScene->m_pointLights.size(); ++i) {
-            const PointLight& pointLight = pScene->m_pointLights[i];
-            if (pRenderer->m_pointLightFrustumCuller.getCullResults()[i]) {
-                pRenderer->addPointLight(pointLight.getPosition(), pointLight.getIntensity(), pointLight.isShadowMapEnabled());
-            }
-        }
-
-        if(pRenderer->m_inUsePointLightShadowMaps > 0) {
-            pRenderer->computePointLightShadowMatrices();
-
-            // create more buckets (and per-bucket objects) if necessary (first render, or more lights came into frame)
-            size_t numPointLightShadowCallBuckets = 6 * pRenderer->m_inUsePointLightShadowMaps;
-
-            if (pRenderer->m_pointLightShadowCallBuckets.size() < numPointLightShadowCallBuckets) {
-                pRenderer->m_pointLightShadowCallBuckets.resize(numPointLightShadowCallBuckets);
-            }
-
-            if (pRenderer->m_pointLightShadowCallBucketsSkinned.size() < numPointLightShadowCallBuckets) {
-                pRenderer->m_pointLightShadowCallBucketsSkinned.resize(numPointLightShadowCallBuckets);
-            }
-
-            if (pRenderer->m_fillPointShadowCallBucketParams.size() < numPointLightShadowCallBuckets) {
-                pRenderer->m_fillPointShadowCallBucketParams.resize(numPointLightShadowCallBuckets);
-            }
-
-            if (pRenderer->m_fillSkinnedPointShadowCallBucketParams.size() < numPointLightShadowCallBuckets) {
-                pRenderer->m_fillSkinnedPointShadowCallBucketParams.resize(numPointLightShadowCallBuckets);
-            }
-
-            if (pRenderer->m_pointShadowFrustumCullers.size() < numPointLightShadowCallBuckets) {
-                pRenderer->m_pointShadowFrustumCullers.resize(numPointLightShadowCallBuckets);
-            }
-
-            if (pRenderer->m_pointShadowListBuilders.size() < numPointLightShadowCallBuckets) {
-                pRenderer->m_pointShadowListBuilders.resize(numPointLightShadowCallBuckets);
-            }
-
-            if (pRenderer->m_buildPointShadowMapListsParams.size() < numPointLightShadowCallBuckets) {
-                pRenderer->m_buildPointShadowMapListsParams.resize(numPointLightShadowCallBuckets);
-            }
-        }
+    if(pRenderer->m_inUsePointLightShadowMaps > 0) {
+        pRenderer->computePointLightShadowMatrices();
     }
 
     // Directional light (cascaded) shadow maps
@@ -938,92 +783,37 @@ void Renderer::dispatchRenderJobs(uintptr_t param) {
         // Compute shadow map bounding volume and split light frustum into cascades
         glm::vec3 sceneAABBMin, sceneAABBMax;
         pScene->computeAABB(sceneAABBMin, sceneAABBMax);
-        pRenderer->computeShadowMapMatrices(sceneAABBMin, sceneAABBMax);
-
-        // Create call buckets (and per-bucket objects) for each shadow map cascade level
-        // Note: this stuff could probably go somewhere else, like an init*() method
-        unsigned numCascades = static_cast<unsigned>(pRenderer->m_parameters.shadowMapNumCascades);
-
-        if(pRenderer->m_shadowMapCallBuckets.size() < numCascades) {
-            pRenderer->m_shadowMapCallBuckets.resize(numCascades);
-        }
-
-        if(pRenderer->m_skinnedShadowMapCallBuckets.size() < numCascades) {
-            pRenderer->m_skinnedShadowMapCallBuckets.resize(numCascades);
-        }
-
-        if(pRenderer->m_fillShadowMapCallBucketParams.size() < numCascades) {
-            pRenderer->m_fillShadowMapCallBucketParams.resize(numCascades);
-        }
-
-        if(pRenderer->m_fillSkinnedShadowMapCallBucketParams.size() < numCascades) {
-            pRenderer->m_fillSkinnedShadowMapCallBucketParams.resize(numCascades);
-        }
-
-        if (pRenderer->m_shadowMapFrustumCullers.size() < numCascades) {
-            pRenderer->m_shadowMapFrustumCullers.resize(numCascades);
-        }
-
-        if (pRenderer->m_shadowMapListBuilders.size() < numCascades) {
-            pRenderer->m_shadowMapListBuilders.resize(numCascades);
-        }
-
-        if (pRenderer->m_buildShadowMapListsParams.size() < numCascades) {
-            pRenderer->m_buildShadowMapListsParams.resize(numCascades);
-        }
+        pRenderer->computeShadowMapMatrices(sceneAABBMin, sceneAABBMax, pScene->getActiveCamera());
     }
+
 
     // Dispatch Culling+List building jobs
     JobScheduler::JobDeclaration dispatchListBuildersDecl;
     dispatchListBuildersDecl.param = param;
     dispatchListBuildersDecl.pFunction = dispatchListBuilderJobs;
     dispatchListBuildersDecl.numSignalCounters = 1;
-    dispatchListBuildersDecl.signalCounters[0] = pScheduler->getCounterByID("lb");
+    dispatchListBuildersDecl.signalCounters[0] = pRenderer->m_listBuildersCounter;
     pScheduler->enqueueJob(dispatchListBuildersDecl);
 
     // Dispatch Fill-CallBucket jobs
     JobScheduler::JobDeclaration dispatchCallBucketsDecl;
     dispatchCallBucketsDecl.param = param;
     dispatchCallBucketsDecl.pFunction = dispatchCallBucketJobs;
-    dispatchCallBucketsDecl.waitCounter = pScheduler->getCounterByID("lb");  // wait until list builder jobs return
+    dispatchCallBucketsDecl.waitCounter = pRenderer->m_listBuildersCounter;  // wait until list builder jobs return
     dispatchCallBucketsDecl.numSignalCounters = 1;
-    // This job will modify the struct used by the next job.
-    // To avoid data races, we will explicitly make that job wait for this job.
-    dispatchCallBucketsDecl.signalCounters[0] = pScheduler->getCounterByID("cb");
+    // Once this job (and its children) are completed it will be okay to call the render job
+    dispatchCallBucketsDecl.signalCounters[0] = pParam->signalCounterHandle;
     pScheduler->enqueueJob(dispatchCallBucketsDecl);
-
-    // Create job for filling the call bucket instance buffers
-    // This is only one job because the use of the GL context means only one can happen at a time
-    // So it would be a waste of resources to place these in multiple jobs which would have to wait for one another
-    // The param struct is partially filled by the call buckets job
-    pRenderer->m_fillInstanceBuffersParam.pRenderer = pRenderer;
-    pRenderer->m_fillInstanceBuffersParam.pWindow = pParam->pWindow;
-
-    JobScheduler::JobDeclaration fillInstanceBuffersDecl;
-    fillInstanceBuffersDecl.numSignalCounters = 1;
-    fillInstanceBuffersDecl.param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillInstanceBuffersParam);
-    fillInstanceBuffersDecl.pFunction = fillInstanceBuffersJob;
-    fillInstanceBuffersDecl.signalCounters[0] = pScheduler->getCounterByID("ib");
-    fillInstanceBuffersDecl.waitCounter = pScheduler->getCounterByID("cb");
-
-    pScheduler->enqueueJob(fillInstanceBuffersDecl);
-
-    // Create job to dispatch the render
-    // Rendering has a definite order and each stage needs the GL context so there is no point in splitting this job up
-    JobScheduler::JobDeclaration renderJobDecl;
-    renderJobDecl.numSignalCounters = 1;
-    renderJobDecl.param = param;
-    renderJobDecl.pFunction = renderJob;
-    renderJobDecl.signalCounters[0] = pScheduler->getCounterByID("r");
-    renderJobDecl.waitCounter = pScheduler->getCounterByID("ib");
-
-    pScheduler->enqueueJob(renderJobDecl);
 }
 
 void Renderer::renderJob(uintptr_t param) {
     RendererJobParam* pParam = reinterpret_cast<RendererJobParam*>(param);
 
     pParam->pWindow->acquireContext();
+
+    // This call requires the GL context, so it might as well go here
+    // In the future I may investigate using mapped buffers to make this step able to be done concurrently
+    pParam->pRenderer->updateInstanceBuffers();
 
     pParam->pRenderer->render();
 
@@ -1032,9 +822,9 @@ void Renderer::renderJob(uintptr_t param) {
     pParam->pWindow->releaseContext();
 }
 
-void Renderer::computeMatrices() {
-    m_cameraViewMatrix = m_pActiveCamera->calculateViewMatrix();
-    m_cameraProjectionMatrix = m_pActiveCamera->calculateProjectionMatrix();
+void Renderer::computeMatrices(const Camera* pCamera) {
+    m_cameraViewMatrix = pCamera->calculateViewMatrix();
+    m_cameraProjectionMatrix = pCamera->calculateProjectionMatrix();
     m_lightDirectionViewSpace = glm::normalize(glm::vec3(m_cameraViewMatrix * glm::vec4(m_lightDirection, 0.0)));
     m_viewInverse = glm::inverse(m_cameraViewMatrix);
     // Calculate light view matrices for shadow mapping passes
@@ -1042,7 +832,7 @@ void Renderer::computeMatrices() {
     m_viewToLightMatrix = m_lightViewMatrix * m_viewInverse;
 }
 
-void Renderer::computeShadowMapMatrices(const glm::vec3& sceneAABBMin, const glm::vec3& sceneAABBMax) {
+void Renderer::computeShadowMapMatrices(const glm::vec3& sceneAABBMin, const glm::vec3& sceneAABBMax, const Camera* pCamera) {
 
     glm::vec3 wsSceneAABBPositions[] = {
         {sceneAABBMin.x, sceneAABBMin.y, sceneAABBMin.z},  // 0 0 0
@@ -1059,16 +849,16 @@ void Renderer::computeShadowMapMatrices(const glm::vec3& sceneAABBMin, const glm
         lsSceneAABBPositions[i] = glm::vec3(m_lightViewMatrix * glm::vec4(wsSceneAABBPositions[i], 1.0));
     }
 
-    float cameraZRange = m_parameters.shadowMapMaxDistance - m_pActiveCamera->getNearPlane(); //m_pActiveCamera->getFarPlane() - m_pActiveCamera->getNearPlane();
-    float fovy = m_pActiveCamera->getFOV();
-    float aspect = m_pActiveCamera->getAspectRatio();
+    float cameraZRange = m_parameters.shadowMapMaxDistance - pCamera->getNearPlane(); //pCamera->getFarPlane() - pCamera->getNearPlane();
+    float fovy = pCamera->getFOV();
+    float aspect = pCamera->getAspectRatio();
 
     glm::mat4 cameraViewInverse = glm::inverse(m_cameraViewMatrix);
 
-    for(int i = 0; i < m_parameters.shadowMapNumCascades; i++) {
+    for(uint32_t i = 0; i < m_parameters.shadowMapNumCascades; i++) {
 
-        float intervalEnd  = m_pActiveCamera->getNearPlane() + glm::pow(m_parameters.shadowMapCascadeScale, m_parameters.shadowMapNumCascades-(i+1)) * cameraZRange ;
-        float intervalStart = (i == 0) ? m_pActiveCamera->getNearPlane() : m_shadowMapCascadeSplitDepths[i-1];
+        float intervalEnd  = pCamera->getNearPlane() + glm::pow(m_parameters.shadowMapCascadeScale, m_parameters.shadowMapNumCascades-(i+1)) * cameraZRange ;
+        float intervalStart = (i == 0) ? pCamera->getNearPlane() : m_shadowMapCascadeSplitDepths[i-1];
 
         m_shadowMapCascadeBlurRanges[i] = m_parameters.shadowMapCascadeBlurSize * (intervalEnd-intervalStart);
         m_shadowMapCascadeSplitDepths[i] = intervalEnd;
@@ -1126,11 +916,11 @@ void Renderer::computePointLightShadowMatrices() {
         {0, -1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, -1, 0}
     };
 
-    for(int i = 0; i < m_inUsePointLightShadowMaps; ++i) {
-        int lightIndex = m_pointLightShadowMapLightIndices[i];
+    for(uint32_t i = 0; i < m_inUsePointLightShadowMaps; ++i) {
+        uint32_t lightIndex = m_pointLightShadowMapLightIndices[i];
         glm::mat4 proj = glm::perspective((float) M_PI/2.0f, 1.0f, m_parameters.pointLightShadowMapNear, m_pointLightBoundingSphereRadii[lightIndex]);
         glm::vec3 lightPos = m_pointLightPositions[lightIndex];
-        for(int j = 0; j < 6; ++j) {
+        for(uint32_t j = 0; j < 6; ++j) {
             m_pointLightShadowMapMatrices[i*6+j] = proj * glm::lookAt(lightPos, lightPos+directions[j], upDirs[j]);
         }
     }
@@ -1140,7 +930,7 @@ void Renderer::renderShadowMap() {
     // Render depth for each cascade into depth texture array
 
     m_shadowMapRenderLayer.setEnabledDrawTargets({});
-    for(int i = 0; i < m_parameters.shadowMapNumCascades; i++) {
+    for(uint32_t i = 0; i < m_parameters.shadowMapNumCascades; i++) {
         m_shadowMapRenderLayer.setDepthTexture(&m_lightDepthTexture, i);
 
         m_shadowMapRenderLayer.bind();
@@ -1183,6 +973,7 @@ void Renderer::renderShadowMap() {
 
     // The depth texture is still bound to the depth channel, so make sure not
     // to override it. We don't need depth for a fullscreen quad anyway
+
     glDepthMask(GL_FALSE);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
@@ -1193,7 +984,7 @@ void Renderer::renderShadowMap() {
 
     m_lightDepthTexture.bind(0);
     m_fullScreenQuad.bind();
-    for(int i = 0; i < m_parameters.shadowMapNumCascades; i++) {
+    for(uint32_t i = 0; i < m_parameters.shadowMapNumCascades; i++) {
         m_shadowMapRenderLayer.setEnabledDrawTargets({i});
         m_shadowMapRenderLayer.bind();
         glViewport(0, 0, m_parameters.shadowMapResolution, m_parameters.shadowMapResolution);
@@ -1231,7 +1022,7 @@ void Renderer::filterShadowMap() {
 
     m_fullScreenQuad.bind();
 
-    for(int i = 0; i < m_parameters.shadowMapNumCascades; i++) {
+    for(uint32_t i = 0; i < m_parameters.shadowMapNumCascades; i++) {
         // Downsample the cascade array layer into the filter texture object
         m_shadowMapRenderLayer.setEnabledReadTarget(i);
         m_shadowMapFilterRenderLayer.setEnabledDrawTargets({1});
@@ -1355,8 +1146,8 @@ void Renderer::renderPointLightShadows() {
     } else {*/
         // Render each face separately as a 2D target
         // Potentially 6x more draw calls, but may be better due to per-face culling
-        for(int i = 0; i < m_inUsePointLightShadowMaps; ++i) {
-            for(int ci = 0; ci < 6; ++ci) {
+        for(uint32_t i = 0; i < m_inUsePointLightShadowMaps; ++i) {
+            for(uint32_t ci = 0; ci < 6; ++ci) {
                 m_pointLightShadowRenderLayer.setDepthTexture(m_pointLightShadowDepthMaps[i], ci);
                 m_pointLightShadowRenderLayer.bind();
                 glViewport(0, 0, m_parameters.pointLightShadowMapResolution, m_parameters.pointLightShadowMapResolution);
@@ -1406,10 +1197,10 @@ void Renderer::renderPointLightShadows() {
     // remove depth texture for framebuffer completeness
     m_pointLightShadowRenderLayer.setDepthTexture(nullptr);
     m_fullScreenQuad.bind();
-    for(int i = 0; i < m_inUsePointLightShadowMaps; ++i) {
+    for(uint32_t i = 0; i < m_inUsePointLightShadowMaps; ++i) {
         m_pointLightShadowDepthMaps[i]->bind(0);
 
-        for(int j = 0; j < 6; ++j) {
+        for(uint32_t j = 0; j < 6; ++j) {
             m_pointLightShadowRenderLayer.setTextureAttachment(0, m_pointLightShadowMaps[i], j);
             m_pointLightShadowRenderLayer.setEnabledDrawTargets({0});
             m_pointLightShadowRenderLayer.bind();
@@ -1753,7 +1544,10 @@ void Renderer::renderDeferredPass() {
         std::vector<glm::mat4> pointLightMVPs(m_pointLightPositions.size());
         glStencilMask(0xFE);
         for(size_t i = 0; i < m_pointLightPositions.size(); ++i) {
-            glm::mat4 pointLightModelMatrix = glm::translate(m_pointLightPositions[i]) * glm::mat4(glm::mat3(m_pointLightBoundingSphereRadii[i]));
+            glm::mat4 pointLightModelMatrix =
+                glm::translate(glm::mat4(1.0f), m_pointLightPositions[i]) *
+                glm::mat4(glm::mat3(m_pointLightBoundingSphereRadii[i]));
+
             pointLightMVPs[i] = m_cameraProjectionMatrix * m_cameraViewMatrix * pointLightModelMatrix;
 
             // Set state for stencil render
@@ -1878,7 +1672,7 @@ void Renderer::renderBloom() {
     m_horizontalFilterShader.setUniformArray("kernelOffsets", 3, kernelOffsets);
 
     //int nBloomIterations = 1;
-    for(int i = 0; i < m_parameters.numBloomLevels; ++i) {
+    for(uint32_t i = 0; i < m_parameters.numBloomLevels; ++i) {
         TextureParameters cLevelParameters = m_bloomTextures[2*i]->getParameters();
 
         m_bloomRenderLayer[i%2].setTextureAttachment(0, m_bloomTextures[2*i]);
@@ -2047,7 +1841,7 @@ void Renderer::initBloom() {
     bloomTextureParameters.useLinearFiltering = true;
     bloomTextureParameters.useEdgeClamping = true;
 
-    if((int) m_bloomTextures.size() < 2*m_parameters.numBloomLevels)
+    if(m_bloomTextures.size() < 2*m_parameters.numBloomLevels)
         m_bloomTextures.resize(2*m_parameters.numBloomLevels, nullptr);
 
     if(m_isViewportInitialized) {
@@ -2055,7 +1849,7 @@ void Renderer::initBloom() {
         bloomTextureParameters.height = m_viewportHeight;
     }
 
-    for(int i = 0; i < 2*m_parameters.numBloomLevels; ++i) {
+    for(uint32_t i = 0; i < 2*m_parameters.numBloomLevels; ++i) {
         if(m_bloomTextures[i] == nullptr) m_bloomTextures[i] = new Texture();
         m_bloomTextures[i]->setParameters(bloomTextureParameters);
         if(m_isViewportInitialized) {
@@ -2182,7 +1976,7 @@ void Renderer::initShadowMap() {
     m_shadowMapArrayTexture.setParameters(shadowMapArrayTextureParameters);
     m_shadowMapArrayTexture.allocateData(nullptr);
 
-    for(int i = 0; i < m_parameters.shadowMapNumCascades; ++i) {
+    for(uint32_t i = 0; i < m_parameters.shadowMapNumCascades; ++i) {
         m_shadowMapRenderLayer.setTextureAttachment(i, &m_shadowMapArrayTexture, i);
     }
 
@@ -2201,6 +1995,18 @@ void Renderer::initShadowMap() {
     m_shadowMapFilterTextures[1].allocateData(nullptr);
     m_shadowMapFilterRenderLayer.setTextureAttachment(0, &m_shadowMapFilterTextures[0]);
     m_shadowMapFilterRenderLayer.setTextureAttachment(1, &m_shadowMapFilterTextures[1]);
+
+    // Create call buckets (and per-bucket objects) for each shadow map cascade level
+    m_shadowMapCallBuckets.resize(m_parameters.shadowMapNumCascades);
+    m_skinnedShadowMapCallBuckets.resize(m_parameters.shadowMapNumCascades);
+
+    m_shadowMapFrustumCullers.resize(m_parameters.shadowMapNumCascades);
+    m_shadowMapListBuilders.resize(m_parameters.shadowMapNumCascades);
+
+    m_fillShadowMapCallBucketParams.resize(m_parameters.shadowMapNumCascades);
+    m_fillSkinnedShadowMapCallBucketParams.resize(m_parameters.shadowMapNumCascades);
+
+    m_buildShadowMapListsParams.resize(m_parameters.shadowMapNumCascades);
 }
 
 void Renderer::initPointLightShadowMaps() {
@@ -2208,19 +2014,35 @@ void Renderer::initPointLightShadowMaps() {
     m_pointLightShadowMapShader.linkVertexGeometry("shaders/vertex_depth.glsl", "shaders/geometry_cubemap.glsl");
     m_pointLightShadowMapShaderSkinned.linkVertexGeometry("shaders/vertex_depth_skin.glsl", "shaders/geometry_cubemap.glsl");
 
-    if(m_parameters.maxPointLightShadowMaps > 0) {
-        m_pointLightShadowMaps.assign(m_parameters.maxPointLightShadowMaps, nullptr);
-        m_pointLightShadowDepthMaps.assign(m_parameters.maxPointLightShadowMaps, nullptr);
-        m_pointLightShadowMapLightIndices.assign(m_parameters.maxPointLightShadowMaps, -1);
-        m_pointLightShadowMapLightKeys.assign(m_parameters.maxPointLightShadowMaps, 0.0f);
-        m_pointLightShadowMapMatrices.resize(m_parameters.maxPointLightShadowMaps*6);
-    }
-    m_numPointLightShadowMaps = 0;
-    m_inUsePointLightShadowMaps = 0;
+    m_pointLightShadowMaps.assign(m_parameters.maxPointLightShadowMaps, nullptr);
 
-    for (int i = 0; i < m_parameters.maxPointLightShadowMaps; ++i) {
+    m_pointLightShadowDepthMaps.assign(m_parameters.maxPointLightShadowMaps, nullptr);
+
+    m_pointLightShadowMapLightIndices.assign(m_parameters.maxPointLightShadowMaps, -1);
+
+    m_pointLightShadowMapLightKeys.assign(m_parameters.maxPointLightShadowMaps, 0.0f);
+
+    size_t numPointLightShadowCallBuckets = 6 * m_parameters.maxPointLightShadowMaps;
+
+    m_pointLightShadowCallBuckets.resize(numPointLightShadowCallBuckets);
+    m_pointLightShadowCallBucketsSkinned.resize(numPointLightShadowCallBuckets);
+
+    m_pointLightShadowMapMatrices.resize(numPointLightShadowCallBuckets);
+
+    m_pointShadowFrustumCullers.resize(numPointLightShadowCallBuckets);
+    m_pointShadowListBuilders.resize(numPointLightShadowCallBuckets);
+
+    m_fillPointShadowCallBucketParams.resize(numPointLightShadowCallBuckets);
+    m_fillSkinnedPointShadowCallBucketParams.resize(numPointLightShadowCallBuckets);
+
+    m_buildPointShadowMapListsParams.resize(numPointLightShadowCallBuckets);
+
+    for (uint32_t i = 0; i < m_parameters.maxPointLightShadowMaps; ++i) {
         addPointLightShadowMap();
     }
+
+    m_numPointLightShadowMaps = 0;
+    m_inUsePointLightShadowMaps = 0;
 }
 
 void Renderer::addPointLightShadowMap() {
