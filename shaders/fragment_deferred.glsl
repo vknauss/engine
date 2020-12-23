@@ -4,6 +4,8 @@
 uniform vec3 lightDirectionViewSpace;
 uniform vec3 lightIntensity;
 
+uniform int enableShadows;
+
 uniform sampler2DArray shadowMap;
 
 uniform mat4 viewToLightMatrix;
@@ -234,7 +236,7 @@ vec4 computeLightingAndShading(vec4 positionViewSpace, vec3 normalViewSpace, vec
 
     vec3 color = cookTorranceBRDF(directionToView, directionToLight, normalViewSpace, lightIntensity, albedo, roughness, metallic);
 
-    float visible = computeVisible(positionViewSpace);
+    float visible = (enableShadows == 1) ? computeVisible(positionViewSpace) : 1.0;
 
     //return (positionViewSpace.w == 0.0) ? vec4(0) : vec4(visible * color, 1.0);
     return vec4(visible * color, 1.0);

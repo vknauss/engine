@@ -278,6 +278,7 @@ private:
     uint32_t m_viewportHeight;
 
     bool m_directionalLightEnabled;
+    bool m_directionalShadowsEnabled;
     bool m_isInitialized = false;
     bool m_isViewportInitialized = false;
 

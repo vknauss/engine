@@ -508,7 +508,7 @@ void Renderer::buildInstanceListsJob(uintptr_t param) {
 void Renderer::render() {
     VKR_DEBUG_CALL(renderGBuffer())
 
-    if(m_directionalLightEnabled) {
+    if(m_directionalShadowsEnabled) {
         VKR_DEBUG_CALL(renderShadowMap())
 
         if(m_parameters.enableShadowFiltering) {
@@ -571,7 +571,7 @@ void Renderer::dispatchListBuilderJobs(uintptr_t param) {
         }
     }
 
-    if(pRenderer->m_directionalLightEnabled) {
+    if(pRenderer->m_directionalShadowsEnabled) {
         for(uint32_t i = 0; i < pRenderer->m_parameters.shadowMapNumCascades; ++i) {
             pRenderer->m_buildShadowMapListsParams[i].filterNonShadowCasters = true;
             pRenderer->m_buildShadowMapListsParams[i].frustumMatrix = pRenderer->m_shadowMapProjectionMatrices[i] * pRenderer->m_lightViewMatrix;
@@ -681,7 +681,7 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
     }
 
     // Directional light (cascaded) shadow maps
-    if(pRenderer->m_directionalLightEnabled) {
+    if(pRenderer->m_directionalShadowsEnabled) {
         // Create job declarations and parameter structs for each shadow cascade level
         for(uint32_t i = 0; i < pRenderer->m_parameters.shadowMapNumCascades; ++i) {
             glm::mat4 frustumMatrix = pRenderer->m_shadowMapProjectionMatrices[i] * pRenderer->m_lightViewMatrix;
@@ -740,6 +740,11 @@ void Renderer::preRenderJob(uintptr_t param) {
     // Do some setup first before enqueueing the various sub-dispatch jobs
 
     pRenderer->setDirectionalLighting(pScene->m_directionalLight.getDirection(), pScene->m_directionalLight.getIntensity());
+    if (pScene->m_directionalLight.isShadowMapEnabled()) {
+        pRenderer->m_directionalShadowsEnabled = pRenderer->m_directionalLightEnabled;
+    } else {
+        pRenderer->m_directionalShadowsEnabled = false;
+    }
     pRenderer->m_ambientLightIntensity = pScene->getAmbientLightIntensity();
 
     pRenderer->computeMatrices(pScene->getActiveCamera());
@@ -779,7 +784,7 @@ void Renderer::preRenderJob(uintptr_t param) {
     }
 
     // Directional light (cascaded) shadow maps
-    if(pRenderer->m_directionalLightEnabled) {
+    if(pRenderer->m_directionalShadowsEnabled) {
         // Compute shadow map bounding volume and split light frustum into cascades
         glm::vec3 sceneAABBMin, sceneAABBMax;
         pScene->computeAABB(sceneAABBMin, sceneAABBMax);
@@ -1514,13 +1519,18 @@ void Renderer::renderDeferredPass() {
         m_deferredDirectionalLightShader.setUniform("lightIntensity", m_lightIntensity);
 
         // TODO: use a UBO for shadow parameters (soft todo lol)
-        m_deferredDirectionalLightShader.setUniformArray("shadowProjectionMatrices", m_parameters.shadowMapNumCascades, m_shadowMapProjectionMatrices.data());
-        m_deferredDirectionalLightShader.setUniformArray("cascadeSplitDepths", m_parameters.shadowMapNumCascades, m_shadowMapCascadeSplitDepths.data());
-        m_deferredDirectionalLightShader.setUniformArray("cascadeBlurRanges", m_parameters.shadowMapNumCascades, m_shadowMapCascadeBlurRanges.data());
-        m_deferredDirectionalLightShader.setUniform("viewToLightMatrix", m_viewToLightMatrix);
-        m_deferredDirectionalLightShader.setUniform("numShadowCascades", m_parameters.shadowMapNumCascades);
-        m_deferredDirectionalLightShader.setUniform("lightBleedCorrectionBias", m_parameters.shadowMapLightBleedCorrectionBias);
-        m_deferredDirectionalLightShader.setUniform("lightBleedCorrectionPower", m_parameters.shadowMapLightBleedCorrectionPower);
+        if (m_directionalShadowsEnabled) {
+            m_deferredDirectionalLightShader.setUniform("enableShadows", 1);
+            m_deferredDirectionalLightShader.setUniformArray("shadowProjectionMatrices", m_parameters.shadowMapNumCascades, m_shadowMapProjectionMatrices.data());
+            m_deferredDirectionalLightShader.setUniformArray("cascadeSplitDepths", m_parameters.shadowMapNumCascades, m_shadowMapCascadeSplitDepths.data());
+            m_deferredDirectionalLightShader.setUniformArray("cascadeBlurRanges", m_parameters.shadowMapNumCascades, m_shadowMapCascadeBlurRanges.data());
+            m_deferredDirectionalLightShader.setUniform("viewToLightMatrix", m_viewToLightMatrix);
+            m_deferredDirectionalLightShader.setUniform("numShadowCascades", m_parameters.shadowMapNumCascades);
+            m_deferredDirectionalLightShader.setUniform("lightBleedCorrectionBias", m_parameters.shadowMapLightBleedCorrectionBias);
+            m_deferredDirectionalLightShader.setUniform("lightBleedCorrectionPower", m_parameters.shadowMapLightBleedCorrectionPower);
+        } else {
+            m_deferredDirectionalLightShader.setUniform("enableShadows", 0);
+        }
 
         m_deferredDirectionalLightShader.setUniform("gBufferPositionViewSpace", 0);
         m_deferredDirectionalLightShader.setUniform("gBufferNormalViewSpace", 1);
@@ -1899,6 +1909,7 @@ void Renderer::initGBuffer() {
     }
     gBufferNormalTextureParameters.useEdgeClamping = true;
     gBufferNormalTextureParameters.useFloatComponents = false;
+    gBufferNormalTextureParameters.bitsPerComponent = 16;
 
     m_gBufferNormalViewSpaceTexture.setParameters(gBufferNormalTextureParameters);
 
@@ -1955,7 +1966,7 @@ void Renderer::initShadowMap() {
     TextureParameters depthTextureParameters = {};
     depthTextureParameters.arrayLayers = m_parameters.shadowMapNumCascades;
     depthTextureParameters.useDepthComponent = true;
-    depthTextureParameters.useFloatComponents = true;
+    depthTextureParameters.useFloatComponents = false;
     depthTextureParameters.useEdgeClamping = true;
     depthTextureParameters.useLinearFiltering = true;
     depthTextureParameters.width = m_parameters.shadowMapResolution;
@@ -1970,6 +1981,7 @@ void Renderer::initShadowMap() {
     shadowMapArrayTextureParameters.height = m_parameters.shadowMapResolution;
     shadowMapArrayTextureParameters.useEdgeClamping = true;
     shadowMapArrayTextureParameters.useFloatComponents = true;
+    shadowMapArrayTextureParameters.bitsPerComponent = 32;
     shadowMapArrayTextureParameters.useLinearFiltering = true;
     shadowMapArrayTextureParameters.useMipmapFiltering = false;
     shadowMapArrayTextureParameters.useAnisotropicFiltering = false;  // mipmapping and anisotropic I couldn't get to work in the deferred renderer :(
@@ -1987,6 +1999,7 @@ void Renderer::initShadowMap() {
     shadowMapFilterTextureParameters.height = m_parameters.shadowMapFilterResolution;
     shadowMapFilterTextureParameters.useEdgeClamping = true;
     shadowMapFilterTextureParameters.useFloatComponents = true;
+    shadowMapFilterTextureParameters.bitsPerComponent = 32;
     shadowMapFilterTextureParameters.useLinearFiltering = true;
     shadowMapFilterTextureParameters.useMipmapFiltering = false;
     m_shadowMapFilterTextures[0].setParameters(shadowMapFilterTextureParameters);
@@ -2058,14 +2071,15 @@ void Renderer::addPointLightShadowMap() {
     TextureParameters parameters = {};
     parameters.cubemap = true;
     parameters.useDepthComponent = true;
-    parameters.useFloatComponents = true;
     parameters.useEdgeClamping = true;
+    parameters.useFloatComponents = true;
+    parameters.bitsPerComponent = 32;
     parameters.width = m_parameters.pointLightShadowMapResolution;
     parameters.height = m_parameters.pointLightShadowMapResolution;
 
     m_pointLightShadowDepthMaps[m_numPointLightShadowMaps] = new Texture();
     m_pointLightShadowDepthMaps[m_numPointLightShadowMaps]->setParameters(parameters);
-    m_pointLightShadowDepthMaps[m_numPointLightShadowMaps]->allocateData(nullptr);
+VKR_DEBUG_CALL(    m_pointLightShadowDepthMaps[m_numPointLightShadowMaps]->allocateData(nullptr); )
 
     parameters.useDepthComponent = false;
     parameters.useLinearFiltering = true;
@@ -2114,7 +2128,7 @@ void Renderer::initSSAO() {
     TextureParameters ssaoRenderTextureParameters = {};
     ssaoRenderTextureParameters.arrayLayers = 1;
     ssaoRenderTextureParameters.numComponents = 1;
-    ssaoRenderTextureParameters.useFloatComponents = true;
+    ssaoRenderTextureParameters.useFloatComponents = false;
     ssaoRenderTextureParameters.useEdgeClamping = true;
     ssaoRenderTextureParameters.useLinearFiltering = true;
     m_ssaoTargetTexture.setParameters(ssaoRenderTextureParameters);

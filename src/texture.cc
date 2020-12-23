@@ -94,38 +94,41 @@ void getFormat(uint32_t nComponents, uint32_t nBits, bool useFloat, bool isBGR, 
     case 1:
         format = GL_RED;
         if(useFloat) {
-            internalFormat = GL_R32F;
-            // floating point textures with 16 bpc may come later, not really needed now
+            if (nBits == 32) internalFormat = GL_R32F;
+            else             internalFormat = GL_R16F;
         } else {
-            if(nBits == 16) internalFormat = GL_R16;
-            else            internalFormat = GL_R8;
+            if (nBits == 16) internalFormat = GL_R16;
+            else             internalFormat = GL_R8;
         }
         break;
     case 2:
         format = GL_RG;
         if(useFloat) {
-            internalFormat = GL_RG32F;
+            if (nBits == 32) internalFormat = GL_RG32F;
+            else             internalFormat = GL_RG16F;
         } else {
-            if(nBits == 16) internalFormat = GL_RG16;
-            else            internalFormat = GL_RG8;
+            if (nBits == 16) internalFormat = GL_RG16;
+            else             internalFormat = GL_RG8;
         }
         break;
     case 3:
         format = isBGR ? GL_BGR : GL_RGB;
         if(useFloat) {
-            internalFormat = GL_RGB32F;
+            if (nBits == 32) internalFormat = GL_RGB32F;
+            else             internalFormat = GL_RGB16F;
         } else {
-            if(nBits == 16) internalFormat = GL_RGB16;
-            else            internalFormat = GL_RGB8;
+            if (nBits == 16) internalFormat = GL_RGB16;
+            else             internalFormat = GL_RGB8;
         }
         break;
     case 4:
         format = isBGR ? GL_BGRA : GL_RGBA;
         if(useFloat) {
-            internalFormat = GL_RGBA32F;
+            if (nBits == 32) internalFormat = GL_RGBA32F;
+            else             internalFormat = GL_RGBA16F;
         } else {
-            if(nBits == 16) internalFormat = GL_RGBA16;
-            else            internalFormat = GL_RGBA8;
+            if (nBits == 16) internalFormat = GL_RGBA16;
+            else             internalFormat = GL_RGBA8;
         }
         break;
     default:
@@ -134,10 +137,11 @@ void getFormat(uint32_t nComponents, uint32_t nBits, bool useFloat, bool isBGR, 
     }
 
     if(useFloat) {
-        componentType = GL_FLOAT;
+        if (nBits == 32) componentType = GL_FLOAT;
+        else             componentType = GL_HALF_FLOAT;
     } else {
-        if(nBits == 16) componentType = GL_UNSIGNED_SHORT;
-        else            componentType = GL_UNSIGNED_BYTE;
+        if (nBits == 16) componentType = GL_UNSIGNED_SHORT;
+        else             componentType = GL_UNSIGNED_BYTE;
     }
 }
 
@@ -172,7 +176,8 @@ void Texture::updateParameters() {
         m_componentType = componentType;
     } else {
         m_format = GL_DEPTH_COMPONENT;
-        if(m_parameters.useFloatComponents) {
+        if (m_parameters.useFloatComponents) {
+            // There is no half float for the depth component
             m_internalFormat = GL_DEPTH_COMPONENT32F;
             m_componentType = GL_FLOAT;
         } else {

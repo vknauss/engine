@@ -47,7 +47,7 @@ void FrameUpdateJob(uintptr_t param) {
     if (!pParam->pause) {
         double gameStateTime = pParam->lastGameStateTime + dt;
 
-        float radius = 5.0f;
+        float radius = 8.0f;
         pParam->pScene->getActiveCamera()->setPosition(glm::vec3(radius*glm::cos(0.f * gameStateTime), 2.0, radius*glm::sin(0.f * gameStateTime)));
         pParam->pScene->getActiveCamera()->setDirection(glm::vec3(1, 0, 1) * -pParam->pScene->getActiveCamera()->getPosition());
         //pParam->pScene->getActiveCamera()->setDirection(glm::vec3(-glm::sin(0.25f * gameStateTime), 0, glm::cos(0.25f * gameStateTime)));
@@ -127,21 +127,22 @@ int main() {
 
     // Startup Renderer
     pApp->getWindow()->acquireContext();
-    pApp->getWindow()->setVSyncInterval(2);
+    pApp->getWindow()->setVSyncInterval(1);
     pApp->getWindow()->setFullscreen(true);
     pApp->getWindow()->setCursorCaptured(true);
     Renderer* pRenderer = new Renderer(pScheduler);
     {
         RendererParameters param = pRenderer->getParameters();
         param.enableMSAA = false;
-        param.enableShadowFiltering = true;
+        param.enableShadowFiltering = false;
         param.enableSSAO = true;
         param.shadowMapNumCascades = 2;
         param.shadowMapCascadeScale = 0.3f;
         param.shadowMapResolution = 1024;
         param.shadowMapFilterResolution = 512;
         param.shadowMapMaxDistance = 10.0f;
-        param.maxPointLightShadowMaps = 2;
+        param.maxPointLightShadowMaps = 1;
+        param.pointLightShadowMapResolution = 512;
         param.shadowMapLightBleedCorrectionBias = 0.1f;
         param.exposure = 0.8f;
         param.numBloomLevels = 3;
@@ -248,7 +249,7 @@ int main() {
         pScene->setActiveCamera(pScene->addCamera(Camera(M_PI/3.0f, (float) pApp->getWindow()->getWidth()/pApp->getWindow()->getHeight(), 0.1f, 100.0f)));
         pScene->getActiveCamera()->setPosition({0, 0, 2});
 
-        pScene->getDirectionalLight().setDirection({0.5, -2, -1}).setIntensity({2, 2, 2}).setShadowMapEnabled(true);
+        pScene->getDirectionalLight().setDirection({0.5, -2, -1}).setIntensity({2, 2, 2}).setShadowMapEnabled(false);
 
         pScene->addPointLight(PointLight().setIntensity({4, 8, 2}).setPosition({2, 1, -0.25}).setShadowMapEnabled(true));
         pScene->addPointLight(PointLight().setIntensity({12, 2, 4}).setPosition({-4, 3, 2}).setShadowMapEnabled(true));
