@@ -62,6 +62,8 @@ public:
 
     void waitForQueues();
 
+    void waitForCounter(CounterHandle handle);
+
     void enqueueJob(JobDeclaration decl);
 
     void enqueueJobs(uint32_t count, JobDeclaration* pDecls, bool ignoreSignals = false);
@@ -92,6 +94,7 @@ private:
 
     struct Counter {
         std::mutex mtx;
+        std::condition_variable cv;
         CounterHandle handle;
         std::string id;
         uint32_t count;

@@ -2011,8 +2011,8 @@ void Renderer::initShadowMap() {
 
 void Renderer::initPointLightShadowMaps() {
     m_pointLightVarianceShader.linkShaderFiles("shaders/vertex_fs.glsl", "shaders/fragment_evsm_cube.glsl");
-    m_pointLightShadowMapShader.linkVertexGeometry("shaders/vertex_depth.glsl", "shaders/geometry_cubemap.glsl");
-    m_pointLightShadowMapShaderSkinned.linkVertexGeometry("shaders/vertex_depth_skin.glsl", "shaders/geometry_cubemap.glsl");
+    //m_pointLightShadowMapShader.linkVertexGeometry("shaders/vertex_depth.glsl", "shaders/geometry_cubemap.glsl");
+    //m_pointLightShadowMapShaderSkinned.linkVertexGeometry("shaders/vertex_depth_skin.glsl", "shaders/geometry_cubemap.glsl");
 
     m_pointLightShadowMaps.assign(m_parameters.maxPointLightShadowMaps, nullptr);
 

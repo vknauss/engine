@@ -29,6 +29,11 @@ void Window::init(bool isResizable) {
     glfwWindowHint(GLFW_RESIZABLE, (int) isResizable);
 
     glfwWindowHint(GLFW_CONTEXT_RELEASE_BEHAVIOR, GLFW_RELEASE_BEHAVIOR_FLUSH);
+<<<<<<< HEAD
+=======
+    //glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    //glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+>>>>>>> a6e6500175455ca5f9ca0b1d1e11688f38717689
 
     GLFWmonitor* pMonitor = glfwGetPrimaryMonitor();
 
