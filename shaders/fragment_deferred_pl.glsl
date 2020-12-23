@@ -16,8 +16,11 @@ uniform float lightBleedCorrectionPower;
 
 uniform int enableEVSM;
 
-const float cPos = 42.0;
-const float cNeg = 14.0;
+//const float cPos = 42.0;
+//const float cNeg = 14.0;
+
+const float cPos = 1.0;
+const float cNeg = 1.0;
 #endif // ENABLE_SHADOW
 
 #ifdef ENABLE_MSAA
@@ -221,6 +224,9 @@ vec4 computeLightingAndShading(vec4 positionViewSpace, vec3 normalViewSpace, vec
     depth = 0.5 * depth + 0.5;
 
     visible = sampleVisible(depth, fromLight);
+    visible = 1.0;
+
+    color = textureCube(shadowMap, fromLight).rgb;
 
     #endif // ENABLE_SHADOW
 

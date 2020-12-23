@@ -1155,6 +1155,7 @@ void Renderer::renderPointLightShadows() {
             for(uint32_t ci = 0; ci < 6; ++ci) {
                 m_pointLightShadowRenderLayer.setDepthTexture(m_pointLightShadowDepthMaps[i], ci);
                 m_pointLightShadowRenderLayer.bind();
+                m_pointLightShadowRenderLayer.validate();
                 glViewport(0, 0, m_parameters.pointLightShadowMapResolution, m_parameters.pointLightShadowMapResolution);
                 glClear(GL_DEPTH_BUFFER_BIT);
 
@@ -1186,6 +1187,9 @@ void Renderer::renderPointLightShadows() {
                         }
 
                         glDrawElementsInstanced(m_pBoundMesh->getDrawType(), m_pBoundMesh->getIndexCount(), GL_UNSIGNED_INT, nullptr, callInfo.numInstances);
+
+                        std::cout << ci << " " << j << " " << callInfo.header.pMaterial->getRoughness() << std::endl;
+
                     }
                 }
             }
@@ -1793,14 +1797,17 @@ void Renderer::renderCompositePass() {
     // This can be used for debugging to draw a different texture in the
     // lower right corner of the window
 
-   /* glViewport(2*m_viewportWidth/3, 0, m_viewportWidth/3, m_viewportHeight/3);
+    glViewport(2*m_viewportWidth/3, 0, m_viewportWidth/3, m_viewportHeight/3);
 
-    m_gBufferNormalViewSpaceTexture.bind(0);
+    m_pointLightShadowMaps[0]->bind(1);
 
+    m_fullScreenShader.setUniform("cubeSampler", 1);
+    m_fullScreenShader.setUniform("cube", 1);
     m_fullScreenShader.setUniform("enableGammaCorrection", 0);
     m_fullScreenShader.setUniform("enableToneMapping", 0);
 
-    m_fullScreenQuad.draw(); */
+    m_fullScreenQuad.draw();
+    m_fullScreenShader.setUniform("cube", 0);
 
     glClearColor(0.0, 0.0, 0.0, 0.0);
 
@@ -2078,7 +2085,7 @@ void Renderer::addPointLightShadowMap() {
     parameters.height = m_parameters.pointLightShadowMapResolution;
 
     m_pointLightShadowDepthMaps[m_numPointLightShadowMaps] = new Texture();
-    m_pointLightShadowDepthMaps[m_numPointLightShadowMaps]->setParameters(parameters);
+VKR_DEBUG_CALL(    m_pointLightShadowDepthMaps[m_numPointLightShadowMaps]->setParameters(parameters); )
 VKR_DEBUG_CALL(    m_pointLightShadowDepthMaps[m_numPointLightShadowMaps]->allocateData(nullptr); )
 
     parameters.useDepthComponent = false;
@@ -2086,8 +2093,8 @@ VKR_DEBUG_CALL(    m_pointLightShadowDepthMaps[m_numPointLightShadowMaps]->alloc
     parameters.numComponents = 4;
 
     m_pointLightShadowMaps[m_numPointLightShadowMaps] = new Texture();
-    m_pointLightShadowMaps[m_numPointLightShadowMaps]->setParameters(parameters);
-    m_pointLightShadowMaps[m_numPointLightShadowMaps]->allocateData(nullptr);
+VKR_DEBUG_CALL(    m_pointLightShadowMaps[m_numPointLightShadowMaps]->setParameters(parameters); )
+VKR_DEBUG_CALL(    m_pointLightShadowMaps[m_numPointLightShadowMaps]->allocateData(nullptr); )
 
     ++m_numPointLightShadowMaps;
 }

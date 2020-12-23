@@ -10,8 +10,11 @@ uniform vec3 faceUp;
 uniform vec3 faceRight;
 uniform int enableEVSM;
 
-const float cPos = 42.0;
-const float cNeg = 14.0;
+//const float cPos = 42.0;
+//const float cNeg = 14.0;
+
+const float cPos = 1.0;
+const float cNeg = 1.0;
 
 void main() {
     vec2 tc = 2.0 * v_texCoords - 1.0;
@@ -57,6 +60,11 @@ void main() {
 
        // moments = m;
         moments = mix(moments, m, 0.25);
+
+        //moments = m;
+
+        //moments = vec4(depth * 0.5 * direction + 0.5, 1.0);
+
     } else {
         //vec4 m2s = m1s*m1s;
 

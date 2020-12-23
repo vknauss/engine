@@ -47,8 +47,8 @@ void FrameUpdateJob(uintptr_t param) {
     if (!pParam->pause) {
         double gameStateTime = pParam->lastGameStateTime + dt;
 
-        float radius = 8.0f;
-        pParam->pScene->getActiveCamera()->setPosition(glm::vec3(radius*glm::cos(0.f * gameStateTime), 2.0, radius*glm::sin(0.f * gameStateTime)));
+        float radius = 12.0f;
+        pParam->pScene->getActiveCamera()->setPosition(glm::vec3(radius*glm::cos(0.25f * gameStateTime), 2.0, radius*glm::sin(0.25f * gameStateTime)));
         pParam->pScene->getActiveCamera()->setDirection(glm::vec3(1, 0, 1) * -pParam->pScene->getActiveCamera()->getPosition());
         //pParam->pScene->getActiveCamera()->setDirection(glm::vec3(-glm::sin(0.25f * gameStateTime), 0, glm::cos(0.25f * gameStateTime)));
 
@@ -134,16 +134,16 @@ int main() {
     {
         RendererParameters param = pRenderer->getParameters();
         param.enableMSAA = false;
-        param.enableShadowFiltering = false;
+        param.enableShadowFiltering = true;
         param.enableSSAO = true;
-        param.shadowMapNumCascades = 2;
+        param.shadowMapNumCascades = 3;
         param.shadowMapCascadeScale = 0.3f;
         param.shadowMapResolution = 1024;
         param.shadowMapFilterResolution = 512;
-        param.shadowMapMaxDistance = 10.0f;
+        param.shadowMapMaxDistance = 20.0f;
         param.maxPointLightShadowMaps = 1;
-        param.pointLightShadowMapResolution = 512;
-        param.shadowMapLightBleedCorrectionBias = 0.1f;
+        param.pointLightShadowMapResolution = 1024;
+        param.shadowMapLightBleedCorrectionBias = 0.0f;
         param.exposure = 0.8f;
         param.numBloomLevels = 3;
         param.initialWidth = pApp->getWindow()->getWidth();
@@ -176,7 +176,7 @@ int main() {
                             .plane(50.0f)
                             //.translate({0, -5, 0})
                             .moveMeshData());
-        meshDatas.push_back(MeshBuilder().cylinder(1.5f, 5.0f, 32, 1, true)
+        meshDatas.push_back(MeshBuilder().cylinder(0.5f, 5.0f, 32, 1, true)
                             .translate({0, 2.5f, 0})
                             .moveMeshData());
         meshDatas.push_back(MeshBuilder().sphere(0.05f, 32, 16)
@@ -251,7 +251,7 @@ int main() {
 
         pScene->getDirectionalLight().setDirection({0.5, -2, -1}).setIntensity({2, 2, 2}).setShadowMapEnabled(false);
 
-        pScene->addPointLight(PointLight().setIntensity({4, 8, 2}).setPosition({2, 1, -0.25}).setShadowMapEnabled(true));
+        pScene->addPointLight(PointLight().setIntensity({4, 16, 2}).setPosition({2, 1, -0.25}).setShadowMapEnabled(true));
         pScene->addPointLight(PointLight().setIntensity({12, 2, 4}).setPosition({-4, 3, 2}).setShadowMapEnabled(true));
 
         pScene->setAmbientLightIntensity({0.1, 0.1, 0.1});

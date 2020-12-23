@@ -71,6 +71,11 @@ void Texture::allocateData(const void* data) {
                 data);
         }
     }
+
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        assert(0);
+    }
 }
 
 void Texture::bind(uint32_t index) const {
@@ -90,7 +95,7 @@ void Texture::generateMipmaps() {
 }
 
 void getFormat(uint32_t nComponents, uint32_t nBits, bool useFloat, bool isBGR, GLenum& format, GLint& internalFormat, GLenum& componentType) {
-    switch(nComponents) {
+    /*switch(nComponents) {
     case 1:
         format = GL_RED;
         if(useFloat) {
@@ -139,6 +144,55 @@ void getFormat(uint32_t nComponents, uint32_t nBits, bool useFloat, bool isBGR, 
     if(useFloat) {
         if (nBits == 32) componentType = GL_FLOAT;
         else             componentType = GL_HALF_FLOAT;
+    } else {
+        if (nBits == 16) componentType = GL_UNSIGNED_SHORT;
+        else             componentType = GL_UNSIGNED_BYTE;
+    }*/
+
+    switch(nComponents) {
+    case 1:
+        format = GL_RED;
+        if(useFloat) {
+            internalFormat = GL_R32F;
+        } else {
+            if (nBits == 16) internalFormat = GL_R16;
+            else             internalFormat = GL_R8;
+        }
+        break;
+    case 2:
+        format = GL_RG;
+        if(useFloat) {
+            internalFormat = GL_RG32F;
+        } else {
+            if (nBits == 16) internalFormat = GL_RG16;
+            else             internalFormat = GL_RG8;
+        }
+        break;
+    case 3:
+        format = isBGR ? GL_BGR : GL_RGB;
+        if(useFloat) {
+            internalFormat = GL_RGB32F;
+        } else {
+            if (nBits == 16) internalFormat = GL_RGB16;
+            else             internalFormat = GL_RGB8;
+        }
+        break;
+    case 4:
+        format = isBGR ? GL_BGRA : GL_RGBA;
+        if(useFloat) {
+            internalFormat = GL_RGBA32F;
+        } else {
+            if (nBits == 16) internalFormat = GL_RGBA16;
+            else             internalFormat = GL_RGBA8;
+        }
+        break;
+    default:
+        assert(0);
+        break;
+    }
+
+    if(useFloat) {
+        componentType = GL_FLOAT;
     } else {
         if (nBits == 16) componentType = GL_UNSIGNED_SHORT;
         else             componentType = GL_UNSIGNED_BYTE;
