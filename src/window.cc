@@ -29,8 +29,6 @@ void Window::init(bool isResizable) {
     glfwWindowHint(GLFW_RESIZABLE, (int) isResizable);
 
     glfwWindowHint(GLFW_CONTEXT_RELEASE_BEHAVIOR, GLFW_RELEASE_BEHAVIOR_FLUSH);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 
     GLFWmonitor* pMonitor = glfwGetPrimaryMonitor();
 
@@ -46,7 +44,7 @@ void Window::init(bool isResizable) {
 
     m_pWindowHandle = glfwCreateWindow(m_width, m_height, m_titleString.c_str(), (pMonitor && m_isFullscreen) ? pMonitor : nullptr , nullptr);
     if(m_pWindowHandle == nullptr) {
-        throw std::runtime_error("Failed to create window. Check OpenGL support. OpenGL 4.3+ Required.");
+        throw std::runtime_error("Failed to create window. Check OpenGL support.");
     }
 
     glfwSetInputMode(m_pWindowHandle, GLFW_CURSOR, m_isCursorCaptured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
