@@ -224,9 +224,9 @@ vec4 computeLightingAndShading(vec4 positionViewSpace, vec3 normalViewSpace, vec
     depth = 0.5 * depth + 0.5;
 
     visible = sampleVisible(depth, fromLight);
-    visible = 1.0;
+    //visible = 1.0;
 
-    color = textureCube(shadowMap, fromLight).rgb;
+    //color = textureCube(shadowMap, fromLight).rgb;
 
     #endif // ENABLE_SHADOW
 

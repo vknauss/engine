@@ -284,9 +284,9 @@ void Renderer::addPointLight(const glm::vec3& position, const glm::vec3& intensi
         key *= key / glm::length(viewPos);
 
         if(m_parameters.maxPointLightShadowMaps < 0 || m_inUsePointLightShadowMaps < m_parameters.maxPointLightShadowMaps) {  // we don't need to steal one
-            if(m_inUsePointLightShadowMaps == m_numPointLightShadowMaps) {  // we do need to make a new one
+//            if(m_inUsePointLightShadowMaps == m_numPointLightShadowMaps) {  // we do need to make a new one
 //                addPointLightShadowMap();
-            }
+//            }
             m_pointLightShadowMapLightIndices[m_inUsePointLightShadowMaps] = static_cast<uint32_t>(m_pointLightShadowMapIndices.size());
             m_pointLightShadowMapLightKeys[m_inUsePointLightShadowMaps] = key;
             m_pointLightShadowMapIndices.push_back(static_cast<int>(m_inUsePointLightShadowMaps));
@@ -319,7 +319,7 @@ void Renderer::clearPointLights() {
     m_pointLightIntensities.clear();
     m_pointLightBoundingSphereRadii.clear();
     m_pointLightShadowMapIndices.clear();
-    m_pointLightShadowMapLightIndices.assign(m_pointLightShadowMapLightIndices.size(), -1);
+    m_pointLightShadowMapLightIndices.assign(m_pointLightShadowMapLightIndices.size(), 0);
     m_pointLightShadowMapLightKeys.assign(m_pointLightShadowMapLightKeys.size(), 0.0f);
     m_inUsePointLightShadowMaps = 0;
 }
@@ -470,7 +470,7 @@ void Renderer::updateInstanceBuffers() {
         fillCallBucketInstanceBuffer(m_skinnedCallBucket);
     }
 
-    for (size_t i = 0; i < 6 * m_numPointLightShadowMaps; ++i) {
+    for (size_t i = 0; i < 6 * m_inUsePointLightShadowMaps; ++i) {
         if (m_pointLightShadowCallBuckets[i].numInstances > 0) {
             fillCallBucketInstanceBuffer(m_pointLightShadowCallBuckets[i]);
         }
@@ -923,6 +923,9 @@ void Renderer::computePointLightShadowMatrices() {
 
     for(uint32_t i = 0; i < m_inUsePointLightShadowMaps; ++i) {
         uint32_t lightIndex = m_pointLightShadowMapLightIndices[i];
+
+        std::cout << "Map: " << i << " Light: " << lightIndex << std::endl;
+
         glm::mat4 proj = glm::perspective((float) M_PI/2.0f, 1.0f, m_parameters.pointLightShadowMapNear, m_pointLightBoundingSphereRadii[lightIndex]);
         glm::vec3 lightPos = m_pointLightPositions[lightIndex];
         for(uint32_t j = 0; j < 6; ++j) {
@@ -1797,7 +1800,7 @@ void Renderer::renderCompositePass() {
     // This can be used for debugging to draw a different texture in the
     // lower right corner of the window
 
-    glViewport(2*m_viewportWidth/3, 0, m_viewportWidth/3, m_viewportHeight/3);
+    /*glViewport(2*m_viewportWidth/3, 0, m_viewportWidth/3, m_viewportHeight/3);
 
     m_pointLightShadowMaps[0]->bind(1);
 
@@ -1807,7 +1810,7 @@ void Renderer::renderCompositePass() {
     m_fullScreenShader.setUniform("enableToneMapping", 0);
 
     m_fullScreenQuad.draw();
-    m_fullScreenShader.setUniform("cube", 0);
+    m_fullScreenShader.setUniform("cube", 0);*/
 
     glClearColor(0.0, 0.0, 0.0, 0.0);
 
@@ -2038,7 +2041,7 @@ void Renderer::initPointLightShadowMaps() {
 
     m_pointLightShadowDepthMaps.assign(m_parameters.maxPointLightShadowMaps, nullptr);
 
-    m_pointLightShadowMapLightIndices.assign(m_parameters.maxPointLightShadowMaps, -1);
+    m_pointLightShadowMapLightIndices.assign(m_parameters.maxPointLightShadowMaps, 0);
 
     m_pointLightShadowMapLightKeys.assign(m_parameters.maxPointLightShadowMaps, 0.0f);
 
@@ -2058,19 +2061,19 @@ void Renderer::initPointLightShadowMaps() {
     m_buildPointShadowMapListsParams.resize(numPointLightShadowCallBuckets);
 
     for (uint32_t i = 0; i < m_parameters.maxPointLightShadowMaps; ++i) {
-        addPointLightShadowMap();
+        addPointLightShadowMap(i);
     }
 
-    m_numPointLightShadowMaps = 0;
+//    m_numPointLightShadowMaps = 0;
     m_inUsePointLightShadowMaps = 0;
 }
 
-void Renderer::addPointLightShadowMap() {
-    if(m_numPointLightShadowMaps == m_parameters.maxPointLightShadowMaps) return;
+void Renderer::addPointLightShadowMap(uint32_t index) {
+    if(index >= m_parameters.maxPointLightShadowMaps) return;
     if(m_parameters.maxPointLightShadowMaps < 0) {
         m_pointLightShadowDepthMaps.push_back(new Texture());
         m_pointLightShadowMaps.push_back(new Texture());
-        m_pointLightShadowMapLightIndices.push_back(-1);
+        m_pointLightShadowMapLightIndices.push_back(0);
         m_pointLightShadowMapLightKeys.push_back(0.0f);
         m_pointLightShadowMapMatrices.insert(m_pointLightShadowMapMatrices.end(), 6, glm::mat4());
     }
@@ -2084,19 +2087,18 @@ void Renderer::addPointLightShadowMap() {
     parameters.width = m_parameters.pointLightShadowMapResolution;
     parameters.height = m_parameters.pointLightShadowMapResolution;
 
-    m_pointLightShadowDepthMaps[m_numPointLightShadowMaps] = new Texture();
-VKR_DEBUG_CALL(    m_pointLightShadowDepthMaps[m_numPointLightShadowMaps]->setParameters(parameters); )
-VKR_DEBUG_CALL(    m_pointLightShadowDepthMaps[m_numPointLightShadowMaps]->allocateData(nullptr); )
+    m_pointLightShadowDepthMaps[index] = new Texture();
+VKR_DEBUG_CALL(    m_pointLightShadowDepthMaps[index]->setParameters(parameters); )
+VKR_DEBUG_CALL(    m_pointLightShadowDepthMaps[index]->allocateData(nullptr); )
 
     parameters.useDepthComponent = false;
     parameters.useLinearFiltering = true;
     parameters.numComponents = 4;
 
-    m_pointLightShadowMaps[m_numPointLightShadowMaps] = new Texture();
-VKR_DEBUG_CALL(    m_pointLightShadowMaps[m_numPointLightShadowMaps]->setParameters(parameters); )
-VKR_DEBUG_CALL(    m_pointLightShadowMaps[m_numPointLightShadowMaps]->allocateData(nullptr); )
+    m_pointLightShadowMaps[index] = new Texture();
+VKR_DEBUG_CALL(    m_pointLightShadowMaps[index]->setParameters(parameters); )
+VKR_DEBUG_CALL(    m_pointLightShadowMaps[index]->allocateData(nullptr); )
 
-    ++m_numPointLightShadowMaps;
 }
 
 void Renderer::initSSAO() {

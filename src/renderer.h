@@ -246,7 +246,7 @@ private:
 
     std::vector<BoundingSphere> m_pointLightBoundingSpheres;
 
-    uint32_t m_numPointLightShadowMaps;
+    //uint32_t m_numPointLightShadowMaps;
     uint32_t m_inUsePointLightShadowMaps;
 
     glm::mat4 m_cameraViewMatrix;
@@ -289,7 +289,7 @@ private:
     void addPointLight(const glm::vec3& position, const glm::vec3& intensity, bool shadowMap);
     void clearPointLights();
 
-    void addPointLightShadowMap();
+    void addPointLightShadowMap(uint32_t index);
 
     //void getCallBucketInstances(CallBucket& bucket, std::list<CallHeader>& headers, std::list<std::list<uint32_t>> instanceLists, const std::vector<bool>& cullResults, const Scene* pScene, glm::mat4 frustumMatrix, bool isSkinned);
     //void fillCallBucket(CallBucket& bucket, const std::vector<InstanceList>& instanceLists, size_t numInstances, const Scene* pScene, glm::mat4 globalMatrix, bool useNormalsMatrix);

@@ -820,7 +820,7 @@ void importAssimp(
                                     minWeightInd = m;
                                 }
                             }
-                            size_t oldJointInd = static_cast<size_t>(meshes[i].boneIndices[vertexIndex][minWeightInd]);
+                            //size_t oldJointInd = static_cast<size_t>(meshes[i].boneIndices[vertexIndex][minWeightInd]);
                             //std::cout << "removing influence of bone " << oldJointInd << " (name: " << skeletonDesc.getJointName(oldJointInd) << " weight: " << minWeight << " position: " << minWeightInd << ")" << std::endl;
                             meshes[i].boneIndices[vertexIndex][minWeightInd] = static_cast<int>(jointIndex);
                             meshes[i].boneWeights[vertexIndex][minWeightInd] = pAiBone->mWeights[l].mWeight;

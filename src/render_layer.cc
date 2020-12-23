@@ -33,7 +33,7 @@ void setAttachment(GLuint fboID, GLenum attachment, Texture* texture, uint32_t l
     if(texture->getParameters().arrayLayers > 1 || texture->getParameters().cubemap) {
         if(layer >= 0) {
             if(texture->getParameters().cubemap) {
-                glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_CUBE_MAP_POSITIVE_X+layer, texture->getHandle(), 0);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X+layer), texture->getHandle(), 0);
             } else {
                 glFramebufferTextureLayer(GL_FRAMEBUFFER, attachment, texture->getHandle(), 0, static_cast<GLint>(layer));
             }
@@ -56,7 +56,7 @@ void RenderLayer::setDepthTexture(Texture* texture, uint32_t textureArrayLayer) 
 }
 
 void RenderLayer::setTextureAttachment(uint32_t index, Texture* texture, uint32_t textureArrayLayer) {
-    setAttachment(m_fbo, GL_COLOR_ATTACHMENT0+index, texture, textureArrayLayer);
+    setAttachment(m_fbo, static_cast<GLenum>(GL_COLOR_ATTACHMENT0+index), texture, textureArrayLayer);
 }
 
 void RenderLayer::setEnabledDrawTargets(std::vector<uint32_t> targets) {

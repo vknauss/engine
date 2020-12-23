@@ -231,7 +231,7 @@ int main() {
     // Create mesh instances
     Scene* pScene = new Scene();
     {
-        size_t skeletonIndex = 0;
+        //size_t skeletonIndex = 0;
         for (size_t i = 0; i < models.size(); ++i) {
             Renderable rbl;
             rbl
