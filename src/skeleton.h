@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "joint.h"
 

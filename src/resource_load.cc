@@ -9,7 +9,7 @@
 #include <stb/stb_image.h>
 
 #define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h>
+#include <tinyobjloader/tiny_obj_loader.h>
 
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>

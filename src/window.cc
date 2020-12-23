@@ -2,6 +2,8 @@
 
 #include <iostream>
 
+#include <GLFW/glfw3.h>
+
 #include "app.h"
 
 Window::Window(App* pParentApp) :

@@ -1,6 +1,8 @@
 #include "scene.h"
 
 #include <algorithm>
+#include <exception>
+#include <stdexcept>
 
 
 Scene::Scene() : m_directionalLight(DirectionalLight()), m_ambientLightIntensity(0.0f) {
