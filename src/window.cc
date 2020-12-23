@@ -10,7 +10,10 @@ Window::Window(App* pParentApp) :
     m_titleString("Window"),
     m_width(1280),
     m_height(800),
+    m_originalWidth(m_width),
+    m_originalHeight(m_height),
     m_isCursorCaptured(false),
+    m_isFullscreen(false),
     m_vSyncInterval(1),
     m_pWindowHandle(nullptr),
     m_contextAvailable(false),
@@ -27,7 +30,19 @@ void Window::init(bool isResizable) {
 
     glfwWindowHint(GLFW_CONTEXT_RELEASE_BEHAVIOR, GLFW_RELEASE_BEHAVIOR_FLUSH);
 
-    m_pWindowHandle = glfwCreateWindow(m_width, m_height, m_titleString.c_str(), nullptr, nullptr);
+    GLFWmonitor* pMonitor = glfwGetPrimaryMonitor();
+
+    if (m_isFullscreen && pMonitor) {
+        const GLFWvidmode* pVidMode = glfwGetVideoMode(pMonitor);
+        if (pVidMode) {
+            m_originalWidth = m_width;
+            m_originalHeight = m_height;
+            m_width = pVidMode->width;
+            m_height = pVidMode->height;
+        }
+    }
+
+    m_pWindowHandle = glfwCreateWindow(m_width, m_height, m_titleString.c_str(), (pMonitor && m_isFullscreen) ? pMonitor : nullptr , nullptr);
     if(m_pWindowHandle == nullptr) {
         throw std::runtime_error("Failed to create window. Check OpenGL support.");
     }
@@ -97,6 +112,30 @@ void Window::setCursorCaptured(bool isCursorCaptured) {
 
     if(m_pWindowHandle != nullptr) {
         glfwSetInputMode(m_pWindowHandle, GLFW_CURSOR, m_isCursorCaptured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    }
+}
+
+void Window::setFullscreen(bool isFullscreen) {
+    m_isFullscreen = isFullscreen;
+
+    if(m_pWindowHandle != nullptr) {
+        GLFWmonitor* pMonitor = glfwGetPrimaryMonitor();
+        if (pMonitor) {
+            const GLFWvidmode* pVidMode = glfwGetVideoMode(pMonitor);
+            if (pVidMode) {
+                int xpos = isFullscreen ? 0 : pVidMode->width / 2 - m_originalWidth / 2;
+                int ypos = isFullscreen ? 0 : pVidMode->height / 2 - m_originalHeight / 2;
+                int width = isFullscreen ? pVidMode->width : m_originalWidth;
+                int height = isFullscreen ? pVidMode->height : m_originalHeight;
+                glfwSetWindowMonitor(m_pWindowHandle, isFullscreen ? pMonitor : nullptr, xpos, ypos, width, height, GLFW_DONT_CARE);
+                if (isFullscreen) {
+                    m_originalWidth = m_width;
+                    m_originalHeight = m_height;
+                }
+                m_width = width;
+                m_height = height;
+            }
+        }
     }
 }
 

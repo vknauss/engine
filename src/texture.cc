@@ -78,7 +78,7 @@ void Texture::bind(uint32_t index) const {
     glBindTexture(m_textureTarget, m_textureID);
 }
 
-void Texture::setParameters(TextureParameters parameters) {
+void Texture::setParameters(const TextureParameters& parameters) {
     validateParameters(parameters);
     m_parameters = parameters;
     updateParameters();
@@ -223,5 +223,4 @@ void Texture::updateParameters() {
 
 void Texture::validateParameters(const TextureParameters& parameters) {
     assert(parameters.useDepthComponent || (parameters.numComponents > 0 && parameters.numComponents <= 4));
-    assert(parameters.arrayLayers >= 0);
 }

@@ -34,7 +34,7 @@ public:
 
     void bind(uint32_t index) const;
 
-    void setParameters(TextureParameters parameters);
+    void setParameters(const TextureParameters& parameters);
 
     void generateMipmaps();
 

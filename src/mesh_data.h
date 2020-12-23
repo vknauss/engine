@@ -53,7 +53,7 @@ public:
     }
 
     bool hasUVs() const {
-        return uvs.size() == uvs.size();
+        return uvs.size() == vertices.size();
     }
 
     bool hasBoneWeights() const {

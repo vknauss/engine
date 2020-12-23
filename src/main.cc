@@ -1,9 +1,15 @@
 #include <iostream>
 #include <exception>
 
+#include <algorithm>
+
 #include <glm/glm.hpp>
 
 #include <glm/gtc/noise.hpp>
+
+
+
+
 
 #include "app.h"
 #include "job_scheduler.h"
@@ -44,29 +50,41 @@ void FrameUpdateJob(uintptr_t param) {
 
 
     //std::cout << "update" << std::endl;
-
+    bool readyQuit = glfwGetKey( pParam->pApp->getWindow()->getHandle(), GLFW_KEY_ESCAPE) == GLFW_PRESS;
     pParam->pApp->pollEvents();
+
+    if (readyQuit && (glfwGetKey(pParam->pApp->getWindow()->getHandle(), GLFW_KEY_ESCAPE) == GLFW_RELEASE)) {
+        pParam->pApp->requestQuit();
+        return;
+    }
 
     bool pause = glfwGetKey( pParam->pApp->getWindow()->getHandle(), GLFW_KEY_P) == GLFW_PRESS;
 
     double time = glfwGetTime();
     double dt = time - pParam->lastFrameTime;
 
+    glm::vec3 facingDir(0, 0, 1);
+
     if (!pause) {
         double gameStateTime = pParam->lastGameStateTime + dt;
 
-        float radius = 10.0f;
-        pParam->pScene->getActiveCamera()->setPosition(glm::vec3(radius*glm::cos(0.25f * gameStateTime), 2.0, radius*glm::sin(0.25f * gameStateTime)));
+        float radius = 1.0f;
+        pParam->pScene->getActiveCamera()->setPosition(glm::vec3(radius*glm::cos(0.f * gameStateTime), 2.0, radius*glm::sin(0.f * gameStateTime)));
         pParam->pScene->getActiveCamera()->setDirection(glm::vec3(1, 0, 1) * -pParam->pScene->getActiveCamera()->getPosition());
+        //pParam->pScene->getActiveCamera()->setDirection(glm::vec3(-glm::sin(0.25f * gameStateTime), 0, glm::cos(0.25f * gameStateTime)));
 
         if (pParam->pAnimation && pParam->pSkeleton) {
             pParam->pSkeleton->clearPose();
-            float speed = 0.75f;
+            float walkCycleSpeed = 1.25f / (35.0f / 24.0f);
+            glm::vec3 walkCycleForward = {0, 0, 1};
+            float speed = 1.0f;
             float radius = 4.0f;
-            float omega = speed/radius;
+            float omega = speed * walkCycleSpeed/radius;
             pParam->pAnimation->addPoseToSkeleton(speed * gameStateTime, pParam->pSkeleton);
-            pParam->pSkeleton->getJoint("root")->setLocalPoseOffset(glm::vec3(radius * glm::cos(omega * gameStateTime), radius * glm::sin(omega * gameStateTime), 0));
-            pParam->pSkeleton->getJoint("root")->setLocalPoseRotation(glm::rotation(glm::vec3(0, -1, 0), glm::vec3(-glm::sin(omega * gameStateTime), glm::cos(omega * gameStateTime), 0)));
+            float height = pParam->pSkeleton->getJoint(0)->getLocalPoseOffset().y;
+            pParam->pSkeleton->getJoint(0)->setLocalPoseOffset(glm::vec3(radius * glm::sin(omega * gameStateTime), height, radius * glm::cos(omega * gameStateTime)));
+            facingDir = glm::vec3(glm::cos(omega * gameStateTime), 0, -glm::sin(omega * gameStateTime));
+            pParam->pSkeleton->getJoint(0)->setLocalPoseRotation(glm::rotation(walkCycleForward, facingDir));
             pParam->pSkeleton->applyCurrentPose();
             pParam->pSkeleton->computeSkinningMatrices();
         }
@@ -74,6 +92,18 @@ void FrameUpdateJob(uintptr_t param) {
         //pRenderParam->pScene->getDirectionalLight().setDirection(glm::vec3(glm::cos(2*gameStateTime), -2, glm::sin(2*gameStateTime)));
 
         pParam->lastGameStateTime = gameStateTime;
+    }
+
+    if (glfwGetKey(pParam->pApp->getWindow()->getHandle(), GLFW_KEY_F) == GLFW_PRESS) {
+        if (pParam->pSkeleton) {
+
+            //pParam->pScene->getActiveCamera()->setPosition(pParam->pSkeleton->getJoint("Head")->getWorldPosition() + facingDir * 1.25f);
+            //pParam->pScene->getActiveCamera()->setDirection(-facingDir);
+
+            glm::vec3 dir = pParam->pSkeleton->getJoint("Head")->getWorldPosition() - pParam->pScene->getActiveCamera()->getPosition();
+            pParam->pScene->getActiveCamera()->setDirection(dir);
+
+        }
     }
 
 
@@ -116,6 +146,19 @@ void FrameUpdateJob(uintptr_t param) {
     //std::cout << "end update" << std::endl;
 }
 
+struct WindowResizeListener {
+    Renderer* pRenderer;
+    Scene* pScene;
+    Window* pWindow;
+
+    void onFramebufferResize(int width, int height) {
+        pWindow->acquireContext();
+        pRenderer->setViewport(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+        pWindow->releaseContext();
+        pScene->getActiveCamera()->setFOV((float) width / (float) height);
+    }
+};
+
 int main() {
 
     App* pApp = new App();
@@ -141,6 +184,8 @@ int main() {
     // Startup Renderer
     pApp->getWindow()->acquireContext();
     pApp->getWindow()->setVSyncInterval(1);
+    //pApp->getWindow()->setFullscreen(true);
+    //pApp->getWindow()->setCursorCaptured(true);
     Renderer* pRenderer = new Renderer(pScheduler);
     {
         RendererParameters param = pRenderer->getParameters();
@@ -177,15 +222,16 @@ int main() {
         std::vector<int> meshMaterialInds;
         std::vector<int> skeletonDescIndices;
         //importAssimp("models/alienhead.glb", meshDatas, materials, meshMaterialInds, pTextures);
-        importAssimp("models/coolguy/coolguy.gltf", meshDatas, materials, meshMaterialInds, pTextures, skeletonDescriptions, skeletonDescIndices, animations);
+        //importAssimp("models/coolguy/coolguy.gltf", meshDatas, materials, meshMaterialInds, pTextures, skeletonDescriptions, skeletonDescIndices, animations);
+        importAssimp("models/mocap_test.glb", meshDatas, materials, meshMaterialInds, pTextures, skeletonDescriptions, skeletonDescIndices, animations);
 
         meshDatas.push_back(MeshBuilder()
-                            .cube(10.0f)
-                            .translate({0, -5, 0})
+                            .plane(50.0f)
+                            //.translate({0, -5, 0})
                             .moveMeshData());
-        meshDatas.push_back(MeshBuilder().cylinder(0.1f, 5.0f, 32, 1, true)
+        /*meshDatas.push_back(MeshBuilder().cylinder(0.1f, 5.0f, 32, 1, true)
                             .translate({0, 2.5f, 0})
-                            .moveMeshData());
+                            .moveMeshData());*/
         meshDatas.push_back(MeshBuilder().sphere(0.05f, 32, 16)
                             .translate({2, 1, -0.25})
                             .moveMeshData());
@@ -193,12 +239,12 @@ int main() {
                             .translate({-4, 3, 2})
                             .moveMeshData());
 
-        materials.push_back(Material().setTintColor({0.2, 0.8, 0.4})); // Default material in case no material was set for a mesh
-        materials.push_back(Material().setTintColor({0.6, 0.5, 0.65}).setMetallic(1.0).setRoughness(0.1));
+        materials.push_back(Material().setTintColor({0.6, 0.8, 0.7})); // Default material in case no material was set for a mesh
+        //materials.push_back(Material().setTintColor({0.6, 0.5, 0.65}).setMetallic(1.0).setRoughness(0.1));
         materials.push_back(Material().setEmissionIntensity({4, 8, 2}).setShadowCastingEnabled(false));
         materials.push_back(Material().setEmissionIntensity({12, 2, 4}).setShadowCastingEnabled(false));
 
-        meshMaterialInds.push_back(static_cast<int>(materials.size()-4));
+        //meshMaterialInds.push_back(static_cast<int>(materials.size()-4));
         meshMaterialInds.push_back(static_cast<int>(materials.size()-3));
         meshMaterialInds.push_back(static_cast<int>(materials.size()-2));
         meshMaterialInds.push_back(static_cast<int>(materials.size()-1));
@@ -226,10 +272,13 @@ int main() {
             if (skeletonDescIndices[i] >= 0) {
                 models[i].setSkeletonDescription(&skeletonDescriptions[skeletonDescIndices[i]]);
                 models[i].setJointBoundingSpheres(meshDatas[i].computeJointBoundingSpheres(models[i].getSkeletonDescription()->getNumJoints()));
-                skeletons.emplace_back(&skeletonDescriptions[skeletonDescIndices[i]]);
+                //skeletons.emplace_back(&skeletonDescriptions[skeletonDescIndices[i]]);
             }
         }
     }
+
+    for (const SkeletonDescription& sd : skeletonDescriptions) skeletons.emplace_back(&sd);
+
     pApp->getWindow()->releaseContext();
 
     // Create mesh instances
@@ -242,7 +291,10 @@ int main() {
                 .setModel(&models[i])
                 .setWorldTransform(glm::mat4(1.0f));
             if (models[i].getSkeletonDescription()) {
-                rbl.setSkeleton(&skeletons[skeletonIndex++]);
+                auto skelit = std::find_if(skeletons.begin(), skeletons.end(), [&] (const Skeleton& s) { return models[i].getSkeletonDescription() == s.getDescription(); });
+                if (skelit != skeletons.end()) {
+                    rbl.setSkeleton(&(*skelit));
+                }
             }
             pScene->addRenderable(rbl);
         }
