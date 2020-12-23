@@ -42,9 +42,12 @@ public:
 
     void setCursorCaptured(bool isCursorCaptured);
 
+    void setFullscreen(bool isFullscreen);
+
     void setVSyncInterval(int interval);
 
     void clearFramebufferSizeCallback();
+
 
     App* const getParentApp() const {
         return m_pParentApp;
@@ -64,6 +67,10 @@ public:
 
     bool isCursorCaptured() const {
         return m_isCursorCaptured;
+    }
+
+    bool isFullscreen() const {
+        return m_isFullscreen;
     }
 
     int getVSyncInterval() const {
@@ -112,8 +119,11 @@ private:
 
     int m_width;
     int m_height;
+    int m_originalWidth;
+    int m_originalHeight;
 
     bool m_isCursorCaptured;
+    bool m_isFullscreen;
     int m_vSyncInterval;
 
     GLFWwindow* m_pWindowHandle;

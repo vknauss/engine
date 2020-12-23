@@ -719,8 +719,11 @@ void importAssimp(
         materialIDs.resize(pAiScene->mNumMeshes, static_cast<int>(materials.size()));
         skeletonDescIndices.resize(pAiScene->mNumMeshes, -1);
         int c_skeletonIndex = 0;
+        std::map<const aiNode*, int> skeletonNodeMap;
         for (size_t i = 0; i < meshes.size(); ++i) {
             const aiMesh* pAiMesh = pAiScene->mMeshes[i];
+
+            std::cout << "Mesh: " << pAiMesh->mName.C_Str() << std::endl;
 
             meshes[i].vertices.resize(pAiMesh->mNumVertices);
             memcpy(meshes[i].vertices.data(), &pAiMesh->mVertices[0], 3*sizeof(float)*pAiMesh->mNumVertices);
@@ -752,26 +755,33 @@ void importAssimp(
             }
 
             if (pAiMesh->HasBones()) {
-                skeletonDescIndices[i] = c_skeletonIndex++;
 
                 meshes[i].boneIndices.resize(pAiMesh->mNumVertices, glm::ivec4(0));
                 meshes[i].boneWeights.resize(pAiMesh->mNumVertices, glm::vec4(0.0));
-
                 std::vector<int> numVertexBones(pAiMesh->mNumVertices, 0);
 
-                skeletonDescriptions.emplace_back();
-                SkeletonDescription& skeletonDesc = skeletonDescriptions.back();
+                if (auto it = skeletonNodeMap.find(pAiMesh->mBones[0]->mArmature); it != skeletonNodeMap.end()) {
+                    skeletonDescIndices[i] = it->second;
+                } else {
+                    skeletonDescIndices[i] = c_skeletonIndex;
+                    skeletonNodeMap[pAiMesh->mBones[0]->mArmature] = c_skeletonIndex;
+                    ++c_skeletonIndex;
 
-                std::map<const aiNode*, size_t> nodeJointIndices;
+                    std::cout << "Skeleton: " << pAiMesh->mBones[0]->mArmature->mName.C_Str() << std::endl;
 
-                buildSkeletonDescriptionAssimp(pAiMesh->mBones[0]->mArmature, SkeletonDescription::JOINT_NONE, skeletonDesc, nodeJointIndices);
-                if (!skeletonDesc.validate()) {
-                    std::cerr <<
-                        "Failed to validate skeleton description, imported from Assimp." <<
-                        std::endl;
-                }
+                    skeletonDescriptions.emplace_back();
+                    SkeletonDescription& skeletonDesc = skeletonDescriptions.back();
 
-                for (size_t k = 0; k < pAiMesh->mNumBones; ++k) {
+                    std::map<const aiNode*, size_t> nodeJointIndices;
+
+                    buildSkeletonDescriptionAssimp(pAiMesh->mBones[0]->mArmature, SkeletonDescription::JOINT_NONE, skeletonDesc, nodeJointIndices);
+                    if (!skeletonDesc.validate()) {
+                        std::cerr <<
+                            "Failed to validate skeleton description, imported from Assimp." <<
+                            std::endl;
+                    }
+
+                    for (size_t k = 0; k < pAiMesh->mNumBones; ++k) {
                     const aiBone* pAiBone = pAiMesh->mBones[k];
                     size_t jointIndex = nodeJointIndices[pAiBone->mNode];
 
@@ -782,12 +792,17 @@ void importAssimp(
                     }
 
                     skeletonDesc.setBindMatrix(jointIndex, glm::inverse(bindMatrix));
+                    }
+                    skeletonDesc.computeBindTransforms();
                 }
-                skeletonDesc.computeBindTransforms();
+
+                std::cout << "Skeleton: " << pAiMesh->mBones[0]->mArmature->mName.C_Str() << " Assigned to Mesh: " << pAiMesh->mName.C_Str() << std::endl;
+
+                SkeletonDescription& skeletonDesc = skeletonDescriptions[skeletonDescIndices[i]];
 
                 for (size_t k = 0; k < pAiMesh->mNumBones; ++k) {
                     const aiBone* pAiBone = pAiMesh->mBones[k];
-                    size_t jointIndex = nodeJointIndices[pAiBone->mNode];
+                    size_t jointIndex = skeletonDesc.getJointIndex(pAiBone->mName.C_Str()); //nodeJointIndices[pAiBone->mNode];
 
                     for (size_t l = 0; l < pAiBone->mNumWeights; ++l) {
                         size_t vertexIndex = pAiBone->mWeights[l].mVertexId;
@@ -805,6 +820,8 @@ void importAssimp(
                                     minWeightInd = m;
                                 }
                             }
+                            size_t oldJointInd = static_cast<size_t>(meshes[i].boneIndices[vertexIndex][minWeightInd]);
+                            //std::cout << "removing influence of bone " << oldJointInd << " (name: " << skeletonDesc.getJointName(oldJointInd) << " weight: " << minWeight << " position: " << minWeightInd << ")" << std::endl;
                             meshes[i].boneIndices[vertexIndex][minWeightInd] = static_cast<int>(jointIndex);
                             meshes[i].boneWeights[vertexIndex][minWeightInd] = pAiBone->mWeights[l].mWeight;
                         }
@@ -824,7 +841,7 @@ void importAssimp(
     if (pAiScene->HasAnimations()) {
         for (size_t i = 0; i < pAiScene->mNumAnimations; ++i) {
             const aiAnimation* pAiAnimation = pAiScene->mAnimations[i];
-            std::cout << pAiAnimation->mName.C_Str() << std::endl;
+            std::cout << "Animation: " << pAiAnimation->mName.C_Str() << std::endl;
 
             for (const SkeletonDescription& skeletonDesc : skeletonDescriptions) {
 

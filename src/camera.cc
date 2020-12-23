@@ -2,6 +2,10 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#ifndef M_PI
+#define M_PI 3.14159265359
+#endif // M_PI
+
 Camera::Camera(float fov, float aspect, float near, float far) :
     m_position(0, 0, 0), m_direction(0, 0, -1), m_up(0, 1, 0),
     m_fov(fov), m_aspect(aspect), m_nearPlane(near), m_farPlane(far) {
