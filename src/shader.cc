@@ -49,6 +49,8 @@ void Shader::linkShaderFiles(const std::string& vertexCodePath, const std::strin
     GLuint vertexShaderID = loadShader(GL_VERTEX_SHADER, vertexCodePath);
     GLuint fragmentShaderID = loadShader(GL_FRAGMENT_SHADER, fragmentCodePath);
 
+    std::cout << "Linking shader program. Vert: " << vertexCodePath << " Frag: " << fragmentCodePath << std::endl;
+
     link(m_programID, {vertexShaderID, fragmentShaderID});
 }
 
@@ -58,6 +60,8 @@ void Shader::linkShaderFiles(const std::string& vertexCodePath, const std::strin
     GLuint fragmentShaderID = loadShader(GL_FRAGMENT_SHADER, fragmentCodePath);
     GLuint geometryShaderID = loadShader(GL_GEOMETRY_SHADER, geometryCodePath);
 
+    std::cout << "Linking shader program. Vert: " << vertexCodePath << " Frag: " << fragmentCodePath << " Geom: " << geometryCodePath << std::endl;
+
     link(m_programID, {vertexShaderID, fragmentShaderID, geometryShaderID});
 }
 
@@ -65,6 +69,8 @@ void Shader::linkShaderFiles(const std::string& vertexCodePath, const std::strin
     // Load vertex and fragment shaders
     GLuint vertexShaderID = loadShader(GL_VERTEX_SHADER, vertexCodePath, vertexHeader);
     GLuint fragmentShaderID = loadShader(GL_FRAGMENT_SHADER, fragmentCodePath, fragmentHeader);
+
+    std::cout << "Linking shader program. Vert: " << vertexCodePath << " Frag: " << fragmentCodePath << std::endl;
 
     link(m_programID, {vertexShaderID, fragmentShaderID});
 }
@@ -76,17 +82,23 @@ void Shader::linkShaderFiles(const std::string& vertexCodePath, const std::strin
     GLuint fragmentShaderID = loadShader(GL_FRAGMENT_SHADER, fragmentCodePath, fragmentHeader);
     GLuint geometryShaderID = loadShader(GL_GEOMETRY_SHADER, geometryCodePath, geometryHeader);
 
+    std::cout << "Linking shader program. Vert: " << vertexCodePath << " Frag: " << fragmentCodePath << " Geom: " << geometryCodePath << std::endl;
+
     link(m_programID, {vertexShaderID, fragmentShaderID, geometryShaderID});
 }
 
 void Shader::linkVertexShader(const std::string& vertexCodePath) {
     GLuint vertexShaderID = loadShader(GL_VERTEX_SHADER, vertexCodePath);
 
+    std::cout << "Linking shader program. Vert: " << vertexCodePath << std::endl;
+
     link(m_programID, {vertexShaderID});
 }
 
 void Shader::linkVertexShader(const std::string& vertexCodePath, const std::string& vertexHeader) {
     GLuint vertexShaderID = loadShader(GL_VERTEX_SHADER, vertexCodePath, vertexHeader);
+
+    std::cout << "Linking shader program. Vert: " << vertexCodePath << std::endl;
 
     link(m_programID, {vertexShaderID});
 }
@@ -95,6 +107,8 @@ void Shader::linkVertexGeometry(const std::string& vertexCodePath, const std::st
     GLuint vertexShaderID = loadShader(GL_VERTEX_SHADER, vertexCodePath);
     GLuint geometryShaderID = loadShader(GL_GEOMETRY_SHADER, geometryCodePath);
 
+    std::cout << "Linking shader program. Vert: " << vertexCodePath << " Geom: " << geometryCodePath << std::endl;
+
     link(m_programID, {vertexShaderID, geometryShaderID});
 }
 
@@ -102,6 +116,8 @@ void Shader::linkVertexGeometry(const std::string& vertexCodePath, const std::st
     const std::string& vertexHeader, const std::string& geometryHeader) {
     GLuint vertexShaderID = loadShader(GL_VERTEX_SHADER, vertexCodePath, vertexHeader);
     GLuint geometryShaderID = loadShader(GL_GEOMETRY_SHADER, geometryCodePath, geometryHeader);
+
+    std::cout << "Linking shader program. Vert: " << vertexCodePath << " Geom: " << geometryCodePath << std::endl;
 
     link(m_programID, {vertexShaderID, geometryShaderID});
 }

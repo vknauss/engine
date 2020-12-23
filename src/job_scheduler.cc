@@ -93,6 +93,8 @@ void JobScheduler::spawnThreads() {
     if (nThreads > 0) {
         m_threadJobQueues.resize(nThreads);
 
+        std::cout << "Spawning " << nThreads << " worker threads." << std::endl;
+
         for (uint32_t i = 0; i < nThreads; ++i) {
             m_workerThreads.push_back(std::thread(workerThreadMain, this, i));
         }
@@ -129,6 +131,13 @@ void JobScheduler::waitForQueues() {
         std::cout << "Queue " << i << " finished" << std::endl;
     }
     std::cout << "All queues finished" << std::endl;
+}
+
+void JobScheduler::waitForCounter(JobScheduler::CounterHandle handle) {
+    std::unique_lock<std::mutex> lock(m_counters[handle].mtx);
+    while (m_counters[handle].count > 0) {
+        m_counters[handle].cv.wait(lock);
+    }
 }
 
 uint32_t JobScheduler::getRandomThread() const {
@@ -320,6 +329,7 @@ void JobScheduler::decrementCounter(JobScheduler::CounterHandle handle) {
         std::shared_lock<std::shared_mutex> slock(m_allCountersMtx);
         std::lock_guard<std::mutex> lock(m_counters[handle].mtx);
         if ((--m_counters[handle].count) == 0) {
+            m_counters[handle].cv.notify_all();
             std::shared_lock<std::shared_mutex> wlock(m_waitListsMtx);
             if (auto kv = m_counterWaitLists.find(handle); kv != m_counterWaitLists.end()) {
                 waitJobs.assign(kv->second.begin(), kv->second.end());
