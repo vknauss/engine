@@ -25,8 +25,8 @@
 
 
 struct FrameUpdateParam {
-    double lastFrameTime;
-    double lastGameStateTime;
+    double c_gameTime;
+    double interval;
 
     bool pause = false;
 
@@ -39,16 +39,11 @@ struct FrameUpdateParam {
 void FrameUpdateJob(uintptr_t param) {
     FrameUpdateParam* pParam = reinterpret_cast<FrameUpdateParam*>(param);
 
-    double time = glfwGetTime();
-    double dt = time - pParam->lastFrameTime;
-
     glm::vec3 facingDir(0, 0, 1);
 
     if (!pParam->pause) {
-        double gameStateTime = pParam->lastGameStateTime + dt;
-
         float radius = 12.0f;
-        pParam->pScene->getActiveCamera()->setPosition(glm::vec3(radius*glm::cos(0.25f * gameStateTime), 2.0, radius*glm::sin(0.25f * gameStateTime)));
+        pParam->pScene->getActiveCamera()->setPosition(glm::vec3(radius*glm::cos(0.25f * pParam->c_gameTime), 2.0, radius*glm::sin(0.25f * pParam->c_gameTime)));
         pParam->pScene->getActiveCamera()->setDirection(glm::vec3(1, 0, 1) * -pParam->pScene->getActiveCamera()->getPosition());
         //pParam->pScene->getActiveCamera()->setDirection(glm::vec3(-glm::sin(0.25f * gameStateTime), 0, glm::cos(0.25f * gameStateTime)));
 
@@ -59,10 +54,10 @@ void FrameUpdateJob(uintptr_t param) {
             float speed = 1.0f;
             float radius = 4.0f;
             float omega = speed * walkCycleSpeed/radius;
-            pParam->pAnimation->addPoseToSkeleton(speed * gameStateTime, pParam->pSkeleton);
+            pParam->pAnimation->addPoseToSkeleton(speed * pParam->c_gameTime, pParam->pSkeleton);
             float height = pParam->pSkeleton->getJoint(0)->getLocalPoseOffset().y;
-            pParam->pSkeleton->getJoint(0)->setLocalPoseOffset(glm::vec3(radius * glm::sin(omega * gameStateTime), height, radius * glm::cos(omega * gameStateTime)));
-            facingDir = glm::vec3(glm::cos(omega * gameStateTime), 0, -glm::sin(omega * gameStateTime));
+            pParam->pSkeleton->getJoint(0)->setLocalPoseOffset(glm::vec3(radius * glm::sin(omega * pParam->c_gameTime), height, radius * glm::cos(omega * pParam->c_gameTime)));
+            facingDir = glm::vec3(glm::cos(omega * pParam->c_gameTime), 0, -glm::sin(omega * pParam->c_gameTime));
             pParam->pSkeleton->getJoint(0)->setLocalPoseRotation(glm::rotation(walkCycleForward, facingDir));
             pParam->pSkeleton->applyCurrentPose();
             pParam->pSkeleton->computeSkinningMatrices();
@@ -70,7 +65,6 @@ void FrameUpdateJob(uintptr_t param) {
 
         //pRenderParam->pScene->getDirectionalLight().setDirection(glm::vec3(glm::cos(2*gameStateTime), -2, glm::sin(2*gameStateTime)));
 
-        pParam->lastGameStateTime = gameStateTime;
     }
 
     //if (glfwGetKey(pParam->pApp->getWindow()->getHandle(), GLFW_KEY_F) == GLFW_PRESS) {
@@ -85,8 +79,6 @@ void FrameUpdateJob(uintptr_t param) {
         }
     //}
 
-
-    pParam->lastFrameTime = time;
 
 }
 
@@ -128,24 +120,24 @@ int main() {
     // Startup Renderer
     pApp->getWindow()->acquireContext();
     pApp->getWindow()->setVSyncInterval(1);
-    pApp->getWindow()->setFullscreen(true);
+    pApp->getWindow()->setFullscreen(false);
     pApp->getWindow()->setCursorCaptured(true);
     Renderer* pRenderer = new Renderer(pScheduler);
     {
         RendererParameters param = pRenderer->getParameters();
         param.enableMSAA = false;
-        param.enableShadowFiltering = true;
-        param.enableSSAO = true;
-        param.shadowMapNumCascades = 3;
+        param.enableShadowFiltering = false;
+        param.enableSSAO = false;
+        param.shadowMapNumCascades = 2;
         param.shadowMapCascadeScale = 0.3f;
-        param.shadowMapResolution = 1024;
-        param.shadowMapFilterResolution = 512;
+        param.shadowMapResolution = 128;
+        param.shadowMapFilterResolution = 128;
         param.shadowMapMaxDistance = 20.0f;
-        param.maxPointLightShadowMaps = 1;
-        param.pointLightShadowMapResolution = 1024;
+        param.maxPointLightShadowMaps = 0;
+        param.pointLightShadowMapResolution = 128;
         param.shadowMapLightBleedCorrectionBias = 0.0f;
         param.exposure = 0.8f;
-        param.numBloomLevels = 3;
+        param.numBloomLevels = 1;
         param.initialWidth = pApp->getWindow()->getWidth();
         param.initialHeight = pApp->getWindow()->getHeight();
 
@@ -251,8 +243,8 @@ int main() {
 
         pScene->getDirectionalLight().setDirection({0.5, -2, -1}).setIntensity({2, 2, 2}).setShadowMapEnabled(false);
 
-        pScene->addPointLight(PointLight().setIntensity({4, 16, 2}).setPosition({2, 1, -0.25}).setShadowMapEnabled(true));
-        pScene->addPointLight(PointLight().setIntensity({12, 2, 4}).setPosition({-4, 3, 2}).setShadowMapEnabled(true));
+        //pScene->addPointLight(PointLight().setIntensity({4, 16, 2}).setPosition({2, 1, -0.25}).setShadowMapEnabled(true));
+        //pScene->addPointLight(PointLight().setIntensity({12, 2, 4}).setPosition({-4, 3, 2}).setShadowMapEnabled(true));
 
         pScene->setAmbientLightIntensity({0.1, 0.1, 0.1});
     }
@@ -272,8 +264,7 @@ int main() {
     // Frame update job
     FrameUpdateParam uParam = {};
     uParam.pScene = pScene;
-    uParam.lastFrameTime = glfwGetTime();
-    uParam.lastGameStateTime = uParam.lastFrameTime;
+    uParam.c_gameTime = 0.0;
 
     if (!skeletons.empty()) {
         uParam.pSkeleton = &skeletons.back();
@@ -311,10 +302,14 @@ int main() {
 
     int frame = 0;
     bool pause = false;
+    double lastFrameTime = glfwGetTime();
+    double lastFPSTime = lastFrameTime;
+    uint32_t framesSinceLastFPS = 0;
     while (pApp->isRunning()) {
         bool ppause = (glfwGetKey(pApp->getWindow()->getHandle(), GLFW_KEY_P) == GLFW_RELEASE);
 
         pApp->pollEvents();
+
 
         if (ppause && ((glfwGetKey(pApp->getWindow()->getHandle(), GLFW_KEY_P) == GLFW_PRESS))) {
             pause = !pause;
@@ -326,8 +321,27 @@ int main() {
             break;
         }
 
+        double time = glfwGetTime();
+        double dt = time - lastFrameTime;
+        lastFrameTime = time;
+        if (!pause) {
+            uParam.c_gameTime += dt;
+            uParam.interval = dt;
+        } else {
+            uParam.interval = 0.0;
+        }
+
+
         pScheduler->enqueueJob(updateDecl);
         pScheduler->waitForCounter(pScheduler->getCounterByID("u"));
+
+        if (time - lastFPSTime >= 1.0) {
+            std::cout << "FPS: " << (framesSinceLastFPS / (time - lastFPSTime)) << std::endl;
+            lastFPSTime = time;
+            framesSinceLastFPS = 0;
+        }
+        ++framesSinceLastFPS;
+
         if(!pause) {
             pScheduler->enqueueJob(preRenderDecl);
             pScheduler->enqueueJob(renderDecl);

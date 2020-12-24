@@ -924,8 +924,6 @@ void Renderer::computePointLightShadowMatrices() {
     for(uint32_t i = 0; i < m_inUsePointLightShadowMaps; ++i) {
         uint32_t lightIndex = m_pointLightShadowMapLightIndices[i];
 
-        std::cout << "Map: " << i << " Light: " << lightIndex << std::endl;
-
         glm::mat4 proj = glm::perspective((float) M_PI/2.0f, 1.0f, m_parameters.pointLightShadowMapNear, m_pointLightBoundingSphereRadii[lightIndex]);
         glm::vec3 lightPos = m_pointLightPositions[lightIndex];
         for(uint32_t j = 0; j < 6; ++j) {
@@ -1190,8 +1188,6 @@ void Renderer::renderPointLightShadows() {
                         }
 
                         glDrawElementsInstanced(m_pBoundMesh->getDrawType(), m_pBoundMesh->getIndexCount(), GL_UNSIGNED_INT, nullptr, callInfo.numInstances);
-
-                        std::cout << ci << " " << j << " " << callInfo.header.pMaterial->getRoughness() << std::endl;
 
                     }
                 }
@@ -2082,8 +2078,6 @@ void Renderer::addPointLightShadowMap(uint32_t index) {
     parameters.cubemap = true;
     parameters.useDepthComponent = true;
     parameters.useEdgeClamping = true;
-    parameters.useFloatComponents = true;
-    parameters.bitsPerComponent = 32;
     parameters.width = m_parameters.pointLightShadowMapResolution;
     parameters.height = m_parameters.pointLightShadowMapResolution;
 
@@ -2091,6 +2085,8 @@ void Renderer::addPointLightShadowMap(uint32_t index) {
 VKR_DEBUG_CALL(    m_pointLightShadowDepthMaps[index]->setParameters(parameters); )
 VKR_DEBUG_CALL(    m_pointLightShadowDepthMaps[index]->allocateData(nullptr); )
 
+    parameters.useFloatComponents = true;
+    //parameters.bitsPerComponent = 32;
     parameters.useDepthComponent = false;
     parameters.useLinearFiltering = true;
     parameters.numComponents = 4;
