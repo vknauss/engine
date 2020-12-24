@@ -4,4 +4,5 @@ obj/*/*
 *.depend
 *.layout
 *.out
+*.cscope_file_list
 CppCheckResults.xml
