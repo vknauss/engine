@@ -285,9 +285,9 @@ int main() {
             } else {
                 continue;
             }
-            int syncInterval = std::max(1, targetFPS / fps);
-            pApp->getWindow()->setVSyncInterval(syncInterval);
-            std::cout << "Setting VSync interval " << syncInterval << " (" << (targetFPS / syncInterval) << " FPS)" << std::endl;
+            int syncInterval = std::max(1, targetFPS / (fps));
+            //pApp->getWindow()->setVSyncInterval(syncInterval);
+            //std::cout << "Setting VSync interval " << syncInterval << " (" << (targetFPS / syncInterval) << " FPS)" << std::endl;
 
             break;
         }
