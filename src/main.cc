@@ -118,7 +118,7 @@ int main() {
 
     // Startup Renderer
     pApp->getWindow()->acquireContext();
-    pApp->getWindow()->setVSyncInterval(1);
+    //pApp->getWindow()->setVSyncInterval(1);
     //pApp->getWindow()->setFullscreen(true);
     //pApp->getWindow()->setCursorCaptured(true);
     Renderer* pRenderer = new Renderer(pScheduler);
@@ -197,7 +197,7 @@ int main() {
         dummy.addPointLight(PointLight().setIntensity({1, 1, 1}).setPosition({-2, 1, 0}).setShadowMapEnabled(true));
         dummy.addPointLight(PointLight().setIntensity({3, 3, 3}).setPosition({4, 1, 5}).setShadowMapEnabled(true));
 
-        MeshData meshData = MeshBuilder().sphere(1.0f, 64, 32).translate(dummy.getActiveCamera()->getPosition() + 2.0f * dummy.getActiveCamera()->getDirection()).plane(50).moveMeshData();
+        MeshData meshData = MeshBuilder().sphere(1.0f, 64, 32).translate(dummy.getActiveCamera()->getPosition() + 4.0f * dummy.getActiveCamera()->getDirection()).plane(50).moveMeshData();
         Material material;
         Mesh mesh;
         mesh.setVertexCount(meshData.vertices.size());
@@ -211,7 +211,7 @@ int main() {
         int targetFPS = glfwGetVideoMode(glfwGetPrimaryMonitor())->refreshRate;
 
         Renderer::RendererJobParam rParam;
-        rParam.pRenderer = pRenderer;
+        //rParam.pRenderer = pRenderer;
         rParam.pScene = &dummy;
         rParam.pScheduler = pScheduler;
         rParam.pWindow = pApp->getWindow();
@@ -231,10 +231,15 @@ int main() {
         renderDecl.pFunction = Renderer::renderJob;
         renderDecl.param = reinterpret_cast<uintptr_t>(&rParam);
 
-        for (size_t i = 0; i < testParameters.size(); ++i) {
-            std::cout << "Trying settings preset " << i << std::endl;
-            pRenderer->init(testParameters[i]);
+        uint32_t preset = 0;
+        for (; preset < testParameters.size(); ++preset) {
+            std::cout << "Trying settings preset " << preset << std::endl;
+
+            Renderer testRenderer(pScheduler);
+            testRenderer.init(testParameters[preset]);
             pApp->getWindow()->releaseContext();
+
+            rParam.pRenderer = &testRenderer;
 
             double beginTime = glfwGetTime();
             uint32_t frames = 0;
@@ -245,6 +250,7 @@ int main() {
 
             preRenderDecl.waitCounter = JobScheduler::COUNTER_NULL;
             while (true) {
+                glfwPollEvents();
                 double time = glfwGetTime();
                 if (time - beginTime >= 1.0) {
                     fps = static_cast<int> (frames / (time - beginTime) + 0.5);
@@ -266,25 +272,29 @@ int main() {
             pScheduler->waitForCounter(renderCounters[0]);
             pScheduler->waitForCounter(renderCounters[1]);
 
-            if (i+1 == testParameters.size() && !accept) {
-                std::cout << "Optimal settings could not be found. Estimated framerate: " << fps << " FPS." << std::endl;
 
-                int syncInterval = 1 + targetFPS / fps;
-                pApp->getWindow()->setVSyncInterval(syncInterval);
-
-                break;
-            }
-            if (accept) {
-                std::cout << "Settings deemed optimal for " << targetFPS << " FPS." << std::endl;
-                break;
-            }
             pApp->getWindow()->acquireContext();
-            pRenderer->cleanup();
+            testRenderer.cleanup();
+
+            std::cout << "Estimated framerate: " << fps << " FPS." << std::endl;
+
+            if (preset+1 == testParameters.size() && !accept) {
+                std::cout << "Optimal settings could not be found." << std::endl;
+            } else if (accept) {
+                std::cout << "Settings deemed optimal for " << targetFPS << " FPS." << std::endl;
+            } else {
+                continue;
+            }
+            int syncInterval = targetFPS / fps;
+            pApp->getWindow()->setVSyncInterval(syncInterval);
+            std::cout << "Setting VSync interval " << syncInterval << " (" << (targetFPS / syncInterval) << " FPS)" << std::endl;
+
+            break;
         }
 
 
 
-        //pRenderer->init(low);
+        pRenderer->init(testParameters[preset]);
 
         //pRenderer->setViewport(pApp->getWindow()->getWidth(), pApp->getWindow()->getHeight());
         pApp->getWindow()->releaseContext();
