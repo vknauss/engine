@@ -318,7 +318,7 @@ int main() {
         importAssimp("models/mocap_test.glb", meshDatas, materials, meshMaterialInds, pTextures, skeletonDescriptions, skeletonDescIndices, animations);
 
         meshDatas.push_back(MeshBuilder()
-                            .plane(50.0f)
+                            .plane(50.0f).uvMapPlanar()
                             //.translate({0, -5, 0})
                             .moveMeshData());
         meshDatas.push_back(MeshBuilder().cylinder(0.5f, 5.0f, 32, 1, true)
@@ -331,7 +331,9 @@ int main() {
                             .translate({-4, 3, 2})
                             .moveMeshData());
 
-        materials.push_back(Material().setTintColor({0.6, 0.8, 0.7})); // Default material in case no material was set for a mesh
+        pTextures.push_back(new Texture());
+        load_texture("textures/checkerboard.png", pTextures.back());
+        materials.push_back(Material().setTintColor({0.6, 0.8, 0.7}).setDiffuseTexture(pTextures.back())); // Default material in case no material was set for a mesh
         materials.push_back(Material().setTintColor({0.6, 0.5, 0.65}).setMetallic(1.0).setRoughness(0.1));
         materials.push_back(Material().setEmissionIntensity({4, 8, 2}).setShadowCastingEnabled(false));
         materials.push_back(Material().setEmissionIntensity({12, 2, 4}).setShadowCastingEnabled(false));
