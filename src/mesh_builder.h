@@ -58,6 +58,8 @@ public:
 
     MeshBuilder& cube(float width);
 
+    MeshBuilder& uvMapPlanar(const glm::vec3& normal = {0, 1, 0});
+
 };
 
 #endif // MESH_BUILDER_H_INCLUDED

@@ -1,6 +1,7 @@
 #include "mesh_builder.h"
 
 #include <algorithm>
+#include <numeric>
 
 #include <glm/gtc/matrix_inverse.hpp>
 
@@ -594,6 +595,33 @@ MeshBuilder& MeshBuilder::cube(float width) {
     m_meshData.normals.resize(m_meshData.vertices.size());
     m_meshData.normals.insert(m_meshData.normals.begin()+indexOffset, normals, normals+24);
     m_meshData.indices.insert(m_meshData.indices.end(), indices, indices+36);
+
+    return *this;
+}
+
+MeshBuilder& MeshBuilder::uvMapPlanar(const glm::vec3& normal) {
+    m_meshData.uvs.resize(m_meshData.vertices.size());
+
+    glm::vec3 n = glm::normalize(normal);
+    glm::vec3 tangent = (glm::abs(n.x) < 1.0f) ? glm::vec3(1, 0, 0) : glm::vec3(0, 0, -1);
+    tangent = glm::normalize(tangent - n * glm::dot(n, tangent));
+    glm::vec3 bitangent = glm::cross(n, tangent);
+
+    glm::vec2 uvMin = std::accumulate(m_meshData.vertices.begin(), m_meshData.vertices.end(),
+                                      glm::vec2(std::numeric_limits<float>::max()),
+                                      [&] (const glm::vec2& acc, const glm::vec3& v) {
+                                            return glm::min(acc, {glm::dot(tangent, v), glm::dot(bitangent, v)});
+                                      });
+    glm::vec2 uvMax = std::accumulate(m_meshData.vertices.begin(), m_meshData.vertices.end(),
+                                      glm::vec2(std::numeric_limits<float>::min()),
+                                      [&] (const glm::vec2& acc, const glm::vec3& v) {
+                                            return glm::max(acc, {glm::dot(tangent, v), glm::dot(bitangent, v)});
+                                      });
+    std::transform(m_meshData.vertices.begin(), m_meshData.vertices.end(),
+                   m_meshData.uvs.begin(),
+                   [&] (const glm::vec3& v) {
+                        return (glm::vec2(glm::dot(tangent, v), glm::dot(bitangent, v)) - uvMin) / (uvMax - uvMin);
+                   });
 
     return *this;
 }
