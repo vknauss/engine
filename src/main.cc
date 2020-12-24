@@ -119,7 +119,7 @@ int main() {
     // Startup Renderer
     pApp->getWindow()->acquireContext();
     //pApp->getWindow()->setVSyncInterval(1);
-    //pApp->getWindow()->setFullscreen(true);
+    pApp->getWindow()->setFullscreen(true);
     //pApp->getWindow()->setCursorCaptured(true);
     Renderer* pRenderer = new Renderer(pScheduler);
     {
@@ -285,7 +285,7 @@ int main() {
             } else {
                 continue;
             }
-            int syncInterval = targetFPS / fps;
+            int syncInterval = std::max(1, targetFPS / fps);
             pApp->getWindow()->setVSyncInterval(syncInterval);
             std::cout << "Setting VSync interval " << syncInterval << " (" << (targetFPS / syncInterval) << " FPS)" << std::endl;
 
