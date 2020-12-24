@@ -199,16 +199,18 @@ void Renderer::setViewport(uint32_t width, uint32_t height) {
     m_sceneRenderLayer.setTextureAttachment(0, &m_sceneTexture);
 
     // Resize HDR bloom textures
-    TextureParameters bloomTextureParameters = m_bloomTextures[0]->getParameters();
-    bloomTextureParameters.width = m_viewportWidth;
-    bloomTextureParameters.height = m_viewportHeight;
-    for(uint32_t i = 0; i < m_parameters.numBloomLevels; ++i) {
-        m_bloomTextures[2*i  ]->setParameters(bloomTextureParameters);
-        m_bloomTextures[2*i+1]->setParameters(bloomTextureParameters);
-        m_bloomTextures[2*i  ]->allocateData(nullptr);
-        m_bloomTextures[2*i+1]->allocateData(nullptr);
-        if(bloomTextureParameters.width  > 1) bloomTextureParameters.width  /= 2;
-        if(bloomTextureParameters.height > 1) bloomTextureParameters.height /= 2;
+    if (m_parameters.numBloomLevels > 0) {
+        TextureParameters bloomTextureParameters = m_bloomTextures[0]->getParameters();
+        bloomTextureParameters.width = m_viewportWidth;
+        bloomTextureParameters.height = m_viewportHeight;
+        for(uint32_t i = 0; i < m_parameters.numBloomLevels; ++i) {
+            m_bloomTextures[2*i  ]->setParameters(bloomTextureParameters);
+            m_bloomTextures[2*i+1]->setParameters(bloomTextureParameters);
+            m_bloomTextures[2*i  ]->allocateData(nullptr);
+            m_bloomTextures[2*i+1]->allocateData(nullptr);
+            if(bloomTextureParameters.width  > 1) bloomTextureParameters.width  /= 2;
+            if(bloomTextureParameters.height > 1) bloomTextureParameters.height /= 2;
+        }
     }
 
     // Resize GBuffer textures
@@ -508,7 +510,7 @@ void Renderer::buildInstanceListsJob(uintptr_t param) {
 void Renderer::render() {
     VKR_DEBUG_CALL(renderGBuffer())
 
-    if(m_directionalShadowsEnabled) {
+    if (m_parameters.enableShadows && m_directionalShadowsEnabled) {
         VKR_DEBUG_CALL(renderShadowMap())
 
         if(m_parameters.enableShadowFiltering) {
@@ -516,17 +518,17 @@ void Renderer::render() {
         }
     }
 
-    if(m_inUsePointLightShadowMaps > 0) {
+    if (m_parameters.enableShadows && m_parameters.enablePointLights && m_inUsePointLightShadowMaps > 0) {
         VKR_DEBUG_CALL(renderPointLightShadows())
     }
 
-    if(m_parameters.enableSSAO) {
+    if (m_parameters.enableSSAO) {
         VKR_DEBUG_CALL(renderSSAOMap())
     }
 
     VKR_DEBUG_CALL(renderDeferredPass())
 
-    if(m_parameters.numBloomLevels > 0) {
+    if (m_parameters.enableBloom && m_parameters.numBloomLevels > 0) {
         VKR_DEBUG_CALL(renderBloom())
     }
 
@@ -555,8 +557,8 @@ void Renderer::dispatchListBuilderJobs(uintptr_t param) {
         ++numDecls;
     }
 
-    if(pRenderer->m_inUsePointLightShadowMaps > 0) {
-        for(uint32_t i = 0; i < 6 * pRenderer->m_inUsePointLightShadowMaps; ++i) {
+    if (pRenderer->m_inUsePointLightShadowMaps > 0) {
+        for (uint32_t i = 0; i < 6 * pRenderer->m_inUsePointLightShadowMaps; ++i) {
             pRenderer->m_buildPointShadowMapListsParams[i].filterNonShadowCasters = true;
             pRenderer->m_buildPointShadowMapListsParams[i].frustumMatrix = pRenderer->m_pointLightShadowMapMatrices[i];
             pRenderer->m_buildPointShadowMapListsParams[i].pCuller = &pRenderer->m_pointShadowFrustumCullers[i];
@@ -639,44 +641,42 @@ void Renderer::dispatchCallBucketJobs(uintptr_t param) {
     }
 
     // Point Lights
-    if(pRenderer->m_inUsePointLightShadowMaps > 0) {
-        // 12 Buckets per shadow-enabled light (one skinned and one non-skinned per cube face)
-        for(uint32_t i = 0; i < 6 * pRenderer->m_inUsePointLightShadowMaps; ++i) {
-            if (pRenderer->m_pointShadowListBuilders[i].hasNonSkinnedInstances()) {
-                pRenderer->m_fillPointShadowCallBucketParams[i].bucket = &pRenderer->m_pointLightShadowCallBuckets[i];
-                pRenderer->m_fillPointShadowCallBucketParams[i].globalMatrix = pRenderer->m_pointLightShadowMapMatrices[i];
-                pRenderer->m_fillPointShadowCallBucketParams[i].instanceLists = &pRenderer->m_pointShadowListBuilders[i].getNonSkinnedInstanceLists();
-                pRenderer->m_fillPointShadowCallBucketParams[i].numInstances = pRenderer->m_pointShadowListBuilders[i].getNumNonSkinnedInstances();
-                pRenderer->m_fillPointShadowCallBucketParams[i].useNormalsMatrix = false;
-                pRenderer->m_fillPointShadowCallBucketParams[i].hasSkinningMatrices = false;
+    // 12 Buckets per shadow-enabled light (one skinned and one non-skinned per cube face)
+    for(uint32_t i = 0; i < 6 * pRenderer->m_inUsePointLightShadowMaps; ++i) {
+        if (pRenderer->m_pointShadowListBuilders[i].hasNonSkinnedInstances()) {
+            pRenderer->m_fillPointShadowCallBucketParams[i].bucket = &pRenderer->m_pointLightShadowCallBuckets[i];
+            pRenderer->m_fillPointShadowCallBucketParams[i].globalMatrix = pRenderer->m_pointLightShadowMapMatrices[i];
+            pRenderer->m_fillPointShadowCallBucketParams[i].instanceLists = &pRenderer->m_pointShadowListBuilders[i].getNonSkinnedInstanceLists();
+            pRenderer->m_fillPointShadowCallBucketParams[i].numInstances = pRenderer->m_pointShadowListBuilders[i].getNumNonSkinnedInstances();
+            pRenderer->m_fillPointShadowCallBucketParams[i].useNormalsMatrix = false;
+            pRenderer->m_fillPointShadowCallBucketParams[i].hasSkinningMatrices = false;
 
-                decls[numDecls].numSignalCounters = 1;
-                decls[numDecls].signalCounters[0] = pParam->signalCounterHandle;
-                decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillPointShadowCallBucketParams[i]);
-                decls[numDecls].pFunction = fillCallBucketJob;
+            decls[numDecls].numSignalCounters = 1;
+            decls[numDecls].signalCounters[0] = pParam->signalCounterHandle;
+            decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillPointShadowCallBucketParams[i]);
+            decls[numDecls].pFunction = fillCallBucketJob;
 
-                ++numDecls;
-            } else {
-                pRenderer->m_pointLightShadowCallBuckets[i].numInstances = 0;
-            }
+            ++numDecls;
+        } else {
+            pRenderer->m_pointLightShadowCallBuckets[i].numInstances = 0;
+        }
 
-            if (pRenderer->m_pointShadowListBuilders[i].hasSkinnedInstances()) {
-                pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].bucket = &pRenderer->m_pointLightShadowCallBucketsSkinned[i];
-                pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].globalMatrix = pRenderer->m_pointLightShadowMapMatrices[i];
-                pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].instanceLists = &pRenderer->m_pointShadowListBuilders[i].getSkinnedInstanceLists();
-                pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].numInstances = pRenderer->m_pointShadowListBuilders[i].getNumSkinnedInstances();
-                pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].useNormalsMatrix = false;
-                pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].hasSkinningMatrices = true;
+        if (pRenderer->m_pointShadowListBuilders[i].hasSkinnedInstances()) {
+            pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].bucket = &pRenderer->m_pointLightShadowCallBucketsSkinned[i];
+            pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].globalMatrix = pRenderer->m_pointLightShadowMapMatrices[i];
+            pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].instanceLists = &pRenderer->m_pointShadowListBuilders[i].getSkinnedInstanceLists();
+            pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].numInstances = pRenderer->m_pointShadowListBuilders[i].getNumSkinnedInstances();
+            pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].useNormalsMatrix = false;
+            pRenderer->m_fillSkinnedPointShadowCallBucketParams[i].hasSkinningMatrices = true;
 
-                decls[numDecls].numSignalCounters = 1;
-                decls[numDecls].signalCounters[0] = pParam->signalCounterHandle;
-                decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillSkinnedPointShadowCallBucketParams[i]);
-                decls[numDecls].pFunction = fillCallBucketJob;
+            decls[numDecls].numSignalCounters = 1;
+            decls[numDecls].signalCounters[0] = pParam->signalCounterHandle;
+            decls[numDecls].param = reinterpret_cast<uintptr_t>(&pRenderer->m_fillSkinnedPointShadowCallBucketParams[i]);
+            decls[numDecls].pFunction = fillCallBucketJob;
 
-                ++numDecls;
-            } else {
-                pRenderer->m_pointLightShadowCallBucketsSkinned[i].numInstances = 0;
-            }
+            ++numDecls;
+        } else {
+            pRenderer->m_pointLightShadowCallBucketsSkinned[i].numInstances = 0;
         }
     }
 
@@ -740,7 +740,7 @@ void Renderer::preRenderJob(uintptr_t param) {
     // Do some setup first before enqueueing the various sub-dispatch jobs
 
     pRenderer->setDirectionalLighting(pScene->m_directionalLight.getDirection(), pScene->m_directionalLight.getIntensity());
-    if (pScene->m_directionalLight.isShadowMapEnabled()) {
+    if (pRenderer->m_parameters.enableShadows && pScene->m_directionalLight.isShadowMapEnabled()) {
         pRenderer->m_directionalShadowsEnabled = pRenderer->m_directionalLightEnabled;
     } else {
         pRenderer->m_directionalShadowsEnabled = false;
@@ -750,41 +750,45 @@ void Renderer::preRenderJob(uintptr_t param) {
     pRenderer->computeMatrices(pScene->getActiveCamera());
 
     // Prepare point lights
-    pRenderer->clearPointLights();
+    if (pRenderer->m_parameters.enablePointLights) {
+        pRenderer->clearPointLights();
 
-    // Determine which point lights we need to draw based on their bounding spheres
-    if (pRenderer->m_pointLightBoundingSpheres.size() < pScene->m_pointLights.size()) {
-        pRenderer->m_pointLightBoundingSpheres.resize(pScene->m_pointLights.size());
-    }
+        // Determine which point lights we need to draw based on their bounding spheres
+        if (pRenderer->m_pointLightBoundingSpheres.size() < pScene->m_pointLights.size()) {
+            pRenderer->m_pointLightBoundingSpheres.resize(pScene->m_pointLights.size());
+        }
 
-    for (size_t i = 0; i < pScene->m_pointLights.size(); ++i) {
-        const PointLight& pointLight = pScene->m_pointLights[i];
-        pRenderer->m_pointLightBoundingSpheres[i]
-            .setPosition(pointLight.getPosition())
-            .setRadius(pointLight.getBoundingSphereRadius());
-    }
+        for (size_t i = 0; i < pScene->m_pointLights.size(); ++i) {
+            const PointLight& pointLight = pScene->m_pointLights[i];
+            pRenderer->m_pointLightBoundingSpheres[i]
+                .setPosition(pointLight.getPosition())
+                .setRadius(pointLight.getBoundingSphereRadius());
+        }
 
-    pRenderer->m_pointLightFrustumCuller.cullSpheres(
-        pRenderer->m_pointLightBoundingSpheres.data(),
-        pScene->m_pointLights.size(),
-        pRenderer->m_cameraProjectionMatrix * pRenderer->m_cameraViewMatrix);
+        pRenderer->m_pointLightFrustumCuller.cullSpheres(
+            pRenderer->m_pointLightBoundingSpheres.data(),
+            pScene->m_pointLights.size(),
+            pRenderer->m_cameraProjectionMatrix * pRenderer->m_cameraViewMatrix);
 
-    for (size_t i = 0; i < pScene->m_pointLights.size(); ++i) {
-        const PointLight& pointLight = pScene->m_pointLights[i];
-        if (pRenderer->m_pointLightFrustumCuller.getCullResults()[i]) {
-            pRenderer->addPointLight(
-                pointLight.getPosition(),
-                pointLight.getIntensity(),
-                pointLight.isShadowMapEnabled());
+        for (size_t i = 0; i < pScene->m_pointLights.size(); ++i) {
+            const PointLight& pointLight = pScene->m_pointLights[i];
+            if (pRenderer->m_pointLightFrustumCuller.getCullResults()[i]) {
+                pRenderer->addPointLight(
+                    pointLight.getPosition(),
+                    pointLight.getIntensity(),
+                    (pRenderer->m_parameters.enableShadows && pRenderer->m_parameters.maxPointLightShadowMaps > 0) ?
+                        pointLight.isShadowMapEnabled() :
+                        false);
+            }
+        }
+
+        if (pRenderer->m_inUsePointLightShadowMaps > 0) {
+            pRenderer->computePointLightShadowMatrices();
         }
     }
 
-    if(pRenderer->m_inUsePointLightShadowMaps > 0) {
-        pRenderer->computePointLightShadowMatrices();
-    }
-
     // Directional light (cascaded) shadow maps
-    if(pRenderer->m_directionalShadowsEnabled) {
+    if (pRenderer->m_directionalShadowsEnabled) {
         // Compute shadow map bounding volume and split light frustum into cascades
         glm::vec3 sceneAABBMin, sceneAABBMax;
         pScene->computeAABB(sceneAABBMin, sceneAABBMax);
@@ -1512,7 +1516,7 @@ void Renderer::renderDeferredPass() {
     m_gBufferEmissionRoughnessTexture.bind(3);
 
     // Directional lighting pass
-    if(m_directionalLightEnabled) {
+    if (m_directionalLightEnabled) {
         m_fullScreenQuad.bind();
 
         glStencilFunc(GL_NOTEQUAL, 0, 0x01);
@@ -1549,7 +1553,7 @@ void Renderer::renderDeferredPass() {
     }
 
     // stencil point light passes
-    if(!m_pointLightPositions.empty()) {
+    if (m_parameters.enablePointLights && !m_pointLightPositions.empty()) {
         glCullFace(GL_FRONT);
 
         m_pointLightSphere.bind();

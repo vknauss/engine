@@ -32,7 +32,10 @@
  **/
 
 struct RendererParameters {
+    bool enableShadows = true;
     bool enableShadowFiltering = true;
+    bool enablePointLights = true;
+    bool enableBloom = true;
     bool enableEVSM = true;
     bool enableSSAO = true;
     bool enableMSAA = true;

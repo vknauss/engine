@@ -10,7 +10,6 @@
 
 
 
-
 #include "app.h"
 #include "job_scheduler.h"
 #include "material.h"
@@ -120,28 +119,172 @@ int main() {
     // Startup Renderer
     pApp->getWindow()->acquireContext();
     pApp->getWindow()->setVSyncInterval(1);
-    pApp->getWindow()->setFullscreen(false);
-    pApp->getWindow()->setCursorCaptured(true);
+    //pApp->getWindow()->setFullscreen(true);
+    //pApp->getWindow()->setCursorCaptured(true);
     Renderer* pRenderer = new Renderer(pScheduler);
     {
         RendererParameters param = pRenderer->getParameters();
-        param.enableMSAA = false;
-        param.enableShadowFiltering = false;
-        param.enableSSAO = false;
-        param.shadowMapNumCascades = 2;
-        param.shadowMapCascadeScale = 0.3f;
-        param.shadowMapResolution = 128;
-        param.shadowMapFilterResolution = 128;
-        param.shadowMapMaxDistance = 20.0f;
-        param.maxPointLightShadowMaps = 0;
-        param.pointLightShadowMapResolution = 128;
-        param.shadowMapLightBleedCorrectionBias = 0.0f;
         param.exposure = 0.8f;
-        param.numBloomLevels = 1;
+        param.shadowMapLightBleedCorrectionBias = 0.0f;
+        param.enableMSAA = false;
         param.initialWidth = pApp->getWindow()->getWidth();
         param.initialHeight = pApp->getWindow()->getHeight();
 
-        pRenderer->init(param);
+
+        RendererParameters minimal = param;
+
+        minimal.enableShadowFiltering = false;
+        minimal.enableSSAO = false;
+        minimal.enableBloom = false;
+        minimal.enablePointLights = false;
+        minimal.enableShadows = false;
+
+        RendererParameters low = param;
+        low.enableShadowFiltering = false;
+        low.enableSSAO = false;
+        low.enableBloom = true;
+        low.enablePointLights = true;
+        low.enableShadows = true;
+        low.maxPointLightShadowMaps = 1;
+        low.pointLightShadowMapResolution = 128;
+        low.shadowMapNumCascades = 2;
+        low.shadowMapCascadeScale = 0.3f;
+        low.shadowMapResolution = 512;
+        low.shadowMapMaxDistance = 15.0f;
+        low.numBloomLevels = 1;
+
+        RendererParameters medium = param;
+        medium.enableShadowFiltering = true;
+        medium.enableSSAO = true;
+        medium.enableBloom = true;
+        medium.enablePointLights = true;
+        medium.enableShadows = true;
+        medium.maxPointLightShadowMaps = 5;
+        medium.pointLightShadowMapResolution = 512;
+        medium.shadowMapNumCascades = 4;
+        medium.shadowMapCascadeScale = 0.3f;
+        medium.shadowMapResolution = 1024;
+        medium.shadowMapFilterResolution = 512;
+        medium.shadowMapMaxDistance = 40.0f;
+        medium.numBloomLevels = 5;
+
+        RendererParameters high = param;
+        high.enableShadowFiltering = true;
+        high.enableSSAO = true;
+        high.enableBloom = true;
+        high.enablePointLights = true;
+        high.enableShadows = true;
+        high.maxPointLightShadowMaps = 12;
+        high.pointLightShadowMapResolution = 1024;
+        high.shadowMapNumCascades = 5;
+        high.shadowMapCascadeScale = 0.4f;
+        high.shadowMapResolution = 2048;
+        high.shadowMapFilterResolution = 1024;
+        high.shadowMapMaxDistance = 40.0f;
+        high.numBloomLevels = 5;
+
+
+        std::cout << "Detecting optimal render settings..." << std::endl;
+
+        std::array<RendererParameters, 4> testParameters = {high, medium, low, minimal};
+
+        // Create dummy scene for test rendering
+        Scene dummy;
+
+        dummy.setActiveCamera(dummy.addCamera(Camera(M_PI/4.0, (float) param.initialWidth / (float) param.initialHeight, 0.1f, 100.0f)));
+        dummy.getActiveCamera()->setPosition(dummy.getActiveCamera()->getPosition() + glm::vec3(0, 1, 0));
+
+        dummy.addPointLight(PointLight().setIntensity({1, 1, 1}).setPosition({-2, 1, 0}).setShadowMapEnabled(true));
+        dummy.addPointLight(PointLight().setIntensity({3, 3, 3}).setPosition({4, 1, 5}).setShadowMapEnabled(true));
+
+        MeshData meshData = MeshBuilder().sphere(1.0f, 64, 32).translate(dummy.getActiveCamera()->getPosition() + 2.0f * dummy.getActiveCamera()->getDirection()).plane(50).moveMeshData();
+        Material material;
+        Mesh mesh;
+        mesh.setVertexCount(meshData.vertices.size());
+        mesh.createVertexBuffer(0, 3, meshData.vertices.data());
+        mesh.createVertexBuffer(1, 3, meshData.normals.data());
+        mesh.createIndexBuffer(meshData.indices.size(), meshData.indices.data());
+        Model model(&mesh, &material, nullptr, meshData.computeBoundingSphere());
+
+        dummy.addRenderable(Renderable().setModel(&model));
+
+        int targetFPS = glfwGetVideoMode(glfwGetPrimaryMonitor())->refreshRate;
+
+        Renderer::RendererJobParam rParam;
+        rParam.pRenderer = pRenderer;
+        rParam.pScene = &dummy;
+        rParam.pScheduler = pScheduler;
+        rParam.pWindow = pApp->getWindow();
+        rParam.signalCounterHandle = pScheduler->getCounterByID("pr");
+
+        JobScheduler::JobDeclaration preRenderDecl;
+        preRenderDecl.numSignalCounters = 1;
+        preRenderDecl.signalCounters[0] = pScheduler->getCounterByID("pr");
+        preRenderDecl.pFunction = Renderer::preRenderJob;
+        preRenderDecl.param = reinterpret_cast<uintptr_t>(&rParam);
+
+        JobScheduler::CounterHandle renderCounters[2] = {pScheduler->getFreeCounter(), pScheduler->getFreeCounter()};
+
+        JobScheduler::JobDeclaration renderDecl;
+        renderDecl.numSignalCounters = 1;
+        renderDecl.waitCounter = pScheduler->getCounterByID("pr");
+        renderDecl.pFunction = Renderer::renderJob;
+        renderDecl.param = reinterpret_cast<uintptr_t>(&rParam);
+
+        for (size_t i = 0; i < testParameters.size(); ++i) {
+            std::cout << "Trying settings preset " << i << std::endl;
+            pRenderer->init(testParameters[i]);
+            pApp->getWindow()->releaseContext();
+
+            double beginTime = glfwGetTime();
+            uint32_t frames = 0;
+
+            int fps = 0;
+
+            bool accept = false;
+
+            preRenderDecl.waitCounter = JobScheduler::COUNTER_NULL;
+            while (true) {
+                double time = glfwGetTime();
+                if (time - beginTime >= 1.0) {
+                    fps = static_cast<int> (frames / (time - beginTime) + 0.5);
+                    if (fps >= targetFPS) {
+                        accept = true;
+                    }
+                    break;
+                }
+
+                pScheduler->enqueueJob(preRenderDecl);
+                renderDecl.signalCounters[0] = renderCounters[frames%2];
+                pScheduler->enqueueJob(renderDecl);
+                pScheduler->waitForCounter(renderCounters[frames%2]);
+
+
+                ++frames;
+            }
+
+            pScheduler->waitForCounter(renderCounters[0]);
+            pScheduler->waitForCounter(renderCounters[1]);
+
+            if (i+1 == testParameters.size() && !accept) {
+                std::cout << "Optimal settings could not be found. Estimated framerate: " << fps << " FPS." << std::endl;
+
+                int syncInterval = 1 + targetFPS / fps;
+                pApp->getWindow()->setVSyncInterval(syncInterval);
+
+                break;
+            }
+            if (accept) {
+                std::cout << "Settings deemed optimal for " << targetFPS << " FPS." << std::endl;
+                break;
+            }
+            pApp->getWindow()->acquireContext();
+            pRenderer->cleanup();
+        }
+
+
+
+        //pRenderer->init(low);
 
         //pRenderer->setViewport(pApp->getWindow()->getWidth(), pApp->getWindow()->getHeight());
         pApp->getWindow()->releaseContext();
@@ -241,10 +384,10 @@ int main() {
         pScene->setActiveCamera(pScene->addCamera(Camera(M_PI/3.0f, (float) pApp->getWindow()->getWidth()/pApp->getWindow()->getHeight(), 0.1f, 100.0f)));
         pScene->getActiveCamera()->setPosition({0, 0, 2});
 
-        pScene->getDirectionalLight().setDirection({0.5, -2, -1}).setIntensity({2, 2, 2}).setShadowMapEnabled(false);
+        pScene->getDirectionalLight().setDirection({0.5, -2, -1}).setIntensity({2, 2, 2}).setShadowMapEnabled(true);
 
-        //pScene->addPointLight(PointLight().setIntensity({4, 16, 2}).setPosition({2, 1, -0.25}).setShadowMapEnabled(true));
-        //pScene->addPointLight(PointLight().setIntensity({12, 2, 4}).setPosition({-4, 3, 2}).setShadowMapEnabled(true));
+        pScene->addPointLight(PointLight().setIntensity({4, 16, 2}).setPosition({2, 1, -0.25}).setShadowMapEnabled(true));
+        pScene->addPointLight(PointLight().setIntensity({12, 2, 4}).setPosition({-4, 3, 2}).setShadowMapEnabled(true));
 
         pScene->setAmbientLightIntensity({0.1, 0.1, 0.1});
     }
@@ -336,7 +479,7 @@ int main() {
         pScheduler->waitForCounter(pScheduler->getCounterByID("u"));
 
         if (time - lastFPSTime >= 1.0) {
-            std::cout << "FPS: " << (framesSinceLastFPS / (time - lastFPSTime)) << std::endl;
+            std::cout << "FPS: " << int (framesSinceLastFPS / (time - lastFPSTime) + 0.5) << std::endl;
             lastFPSTime = time;
             framesSinceLastFPS = 0;
         }
