@@ -108,7 +108,7 @@ float adjustVisibility(float visible) {
     visible = clamp((visible - lightBleedCorrectionBias) / (1.0 - lightBleedCorrectionBias), 0.0, 1.0);
     visible = pow(visible, lightBleedCorrectionPower);
 
-    visible = max(visible - 0.5, 0.0);
+    //visible = max(visible - 0.5, 0.0);
 
     return visible;
 }

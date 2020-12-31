@@ -231,8 +231,9 @@ int main() {
         renderDecl.pFunction = Renderer::renderJob;
         renderDecl.param = reinterpret_cast<uintptr_t>(&rParam);
 
-        uint32_t preset = 0;
-        for (; preset < testParameters.size(); ++preset) {
+        uint32_t preset = 1;
+        bool force = true;
+        for (; !force && preset < testParameters.size(); ++preset) {
             std::cout << "Trying settings preset " << preset << std::endl;
 
             Renderer testRenderer(pScheduler);
