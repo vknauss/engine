@@ -1,0 +1,139 @@
+{
+  "blendtrees": [
+    {
+      "id" : "walk",
+      "node" : {
+        "lerp" : {
+          "first" : {
+            "blend1D" : {
+              "children" : [
+                {
+                  "node" : {
+                    "clip" : "Walk"
+                  },
+                  "position" : 0.0
+                },
+                {
+                  "node" : {
+                    "clip" : "Walk_turn_left"
+                  },
+                  "position" : -1.0
+                },
+                {
+                  "node" : {
+                    "clip" : "Walk_turn_right"
+                  },
+                  "position" : 1.0
+                }
+              ],
+              "parameter" : "turnLR"
+            }
+          },
+          "second" : {
+            "clip" : "Run"
+          },
+          "parameter" : "walkRun"
+        }
+       }
+    }
+  ],
+
+  "states" : [
+    {
+      "id" : "idle",
+      "clip" : "Idle",
+      "timescale" : "auto"
+    },
+    {
+      "id" : "walk",
+      "blendtree-id" : "walk",
+      "timescale-parameter" : "walkSpeed"
+    },
+    {
+      "id" : "jumpStart",
+      "clip" : "Jump_start",
+      "loop" : false
+    },
+    {
+      "id" : "jumpInAir",
+      "clip" : "Jump_in_air",
+      "loop" : false
+    },
+    {
+      "id" : "jumpLand",
+      "clip" : "Jump_land",
+      "loop" : false
+    },
+    {
+      "id" : "fall",
+      "clip" : "Fall",
+      "loop" : true
+    }
+  ],
+
+  "transitions" : [
+    {
+      "from-id" : "idle",
+      "to-id" : "walk",
+      "trigger-flag" : "isWalking",
+      "duration" : 0.2,
+      "to-time" : 0.25,
+      "wait" : false
+    },
+    {
+      "from-id" : "walk",
+      "to-id" : "idle",
+      "trigger-flag" : "isIdle",
+      "duration" : 0.2,
+      "wait" : false
+    },
+    {
+      "from-id" : "idle",
+      "to-id" : "jumpStart",
+      "trigger-flag" : "jump",
+      "wait" : false
+    },
+    {
+      "from-id" : "walk",
+      "to-id" : "jumpStart",
+      "trigger-flag" : "jump",
+      "wait" : false
+    },
+    {
+      "from-id" : "jumpStart",
+      "to-id" : "jumpInAir",
+      "wait" : true,
+      "duration" : 0.0
+    },
+    {
+      "from-id" : "jumpInAir",
+      "to-id" : "jumpLand",
+      "wait" : false,
+      "trigger-flag" : "landJump",
+      "duration" : 0.05
+    },
+    {
+      "from-id" : "any",
+      "to-id" : "fall",
+      "wait" : false,
+      "cancellable" : true,
+      "trigger-flag" : "startFalling",
+      "duration" : 0.5
+    },
+    {
+      "from-id" : "fall",
+      "to-id" : "jumpLand",
+      "wait" : false,
+      "trigger-flag" : "landJump",
+      "duration" : 0.05
+    },
+    {
+      "from-id" : "jumpLand",
+      "to-id" : "idle",
+      "wait" : true,
+      "duration" : 0.05
+    }
+  ],
+
+  "initial-state-id" : "idle"
+}

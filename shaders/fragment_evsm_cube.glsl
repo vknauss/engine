@@ -10,21 +10,53 @@ uniform vec3 faceUp;
 uniform vec3 faceRight;
 uniform int enableEVSM;
 
-//const float cPos = 42.0;
-//const float cNeg = 14.0;
+const float cPos = 42.0;
+const float cNeg = 14.0;
 
-const float cPos = 1.0;
-const float cNeg = 1.0;
+//const float cPos = 1.0;
+//const float cNeg = 1.0;
+
+vec4 sampleMoments(vec3 dir) {
+    float depth = texture(depthCubemap, dir).r;
+    vec4 m = vec4(exp(cPos * depth), 0, -exp(-cNeg * depth), 0);
+    m.yw = m.xz * m.xz;
+    return m;
+}
 
 void main() {
     vec2 tc = 2.0 * v_texCoords - 1.0;
     vec3 direction = faceDirection + tc.x * faceRight + tc.y * faceUp;
 
-    float depth = texture(depthCubemap, direction).r;
+    //float depth = texture(depthCubemap, direction).r;
 
-    vec2 ofs = vec2(1.5) / vec2(textureSize(depthCubemap, 0));
+    vec2 ofs = vec2(0.005); //vec2(1.5) / vec2(textureSize(depthCubemap, 0));
 
-    vec2 tcn = tc + vec2(0, ofs.y);
+    float incr = 0.005;
+
+    int filterWidth = 4;
+    int nSamples = 2*filterWidth-1;
+    nSamples *= nSamples;
+
+    moments = sampleMoments(direction);
+
+    for (int i = 1; i < filterWidth; ++i) {
+        moments += sampleMoments(direction + i * incr * faceRight);
+        moments += sampleMoments(direction - i * incr * faceRight);
+        for (int j = 1; j < filterWidth; ++j) {
+            moments += sampleMoments(direction + i * incr * faceRight + j * incr * faceUp);
+            moments += sampleMoments(direction - i * incr * faceRight + j * incr * faceUp);
+            moments += sampleMoments(direction + i * incr * faceRight - j * incr * faceUp);
+            moments += sampleMoments(direction - i * incr * faceRight - j * incr * faceUp);
+        }
+    }
+    for (int i = 1; i < filterWidth; ++i) {
+        moments += sampleMoments(direction + i * incr * faceUp);
+        moments += sampleMoments(direction - i * incr * faceUp);
+    }
+
+    moments /= float(nSamples);
+
+    /*vec2 tcn = tc + vec2(0, ofs.y);
     vec2 tce = tc + vec2(ofs.x, 0);
     vec2 tcs = tc - vec2(0, ofs.y);
     vec2 tcw = tc - vec2(ofs.x, 0);
@@ -58,8 +90,8 @@ void main() {
         vec4 m = vec4(exp(cPos * depth), 0, -exp(-cNeg * depth), 0);
         m.yw = m.xz * m.xz;
 
-       // moments = m;
-        moments = mix(moments, m, 0.25);
+        //moments = m;
+        moments = mix(moments, m, 0.5);
 
         //moments = m;
 
@@ -74,5 +106,5 @@ void main() {
         moments = vec4(depth, depth*depth, 0, 1);
     }
 
-    //moments = vec4(1, 1, 1, 1);
+    //moments = vec4(1, 1, 1, 1);*/
 }

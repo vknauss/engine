@@ -8,8 +8,8 @@ uniform int enableShadows;
 
 uniform sampler2DArray shadowMap;
 
-uniform mat4 viewToLightMatrix;
-uniform mat4 shadowProjectionMatrices[MAX_CASCADES];
+uniform mat4 inverseProjection;
+uniform mat4 shadowCascadeMatrices[MAX_CASCADES];
 uniform uint numShadowCascades;
 uniform float cascadeSplitDepths[MAX_CASCADES];
 uniform float cascadeBlurRanges[MAX_CASCADES];
@@ -22,10 +22,11 @@ uniform sampler2DMS gBufferNormalViewSpace;
 uniform sampler2DMS gBufferAlbedoMetallic;
 uniform sampler2DMS gBufferEmissionRoughness;
 #else
-uniform sampler2D gBufferPositionViewSpace;
+//uniform sampler2D gBufferPositionViewSpace;
 uniform sampler2D gBufferNormalViewSpace;
 uniform sampler2D gBufferAlbedoMetallic;
 uniform sampler2D gBufferEmissionRoughness;
+uniform sampler2D gBufferDepth;
 #endif // ENABLE_MSAA
 
 uniform int enableEVSM;
@@ -115,8 +116,6 @@ float adjustVisibility(float visible) {
 
 // Shadow map calculations
 float computeVisible(vec4 positionViewSpace) {
-    vec4 lightspaceCoords = viewToLightMatrix * positionViewSpace;
-    float depth = -lightspaceCoords.z;
 
     int cascadeInd = 0;
     int inBlurBand = 0;
@@ -138,7 +137,7 @@ float computeVisible(vec4 positionViewSpace) {
     float visible = 1.0;
 
     //if (cascadeInd < numShadowCascades) {
-        vec4 shadowCoords = shadowProjectionMatrices[cascadeInd] * lightspaceCoords;
+        vec4 shadowCoords = shadowCascadeMatrices[cascadeInd] * positionViewSpace;
         shadowCoords /= shadowCoords.w;
         shadowCoords = coordTransform * shadowCoords;
         float clipDepthNormalized = shadowCoords.z;
@@ -146,7 +145,7 @@ float computeVisible(vec4 positionViewSpace) {
         if(inBlurBand == 0) {
             visible = sampleVisible(clipDepthNormalized, shadowCoords.xy, cascadeInd);
         } else {
-            vec4 nextCascadeCoords = shadowProjectionMatrices[cascadeInd+1] * lightspaceCoords;
+            vec4 nextCascadeCoords = shadowCascadeMatrices[cascadeInd+1] * positionViewSpace;
             nextCascadeCoords /= nextCascadeCoords.w;
             nextCascadeCoords = coordTransform * nextCascadeCoords;
             float nextCDN = nextCascadeCoords.z;
@@ -307,7 +306,10 @@ void main() {
         out_color = computeLightingAndShading(positionViewSpace, normalViewSpace, albedo, roughness, metallic);
     }
     #else
-    vec4 positionViewSpace = texture(gBufferPositionViewSpace, v_texCoords).xyzw;
+    //vec4 positionViewSpace = texture(gBufferPositionViewSpace, v_texCoords).xyzw;
+    vec4 positionCVV = vec4(2.0 * vec3(v_texCoords, texture(gBufferDepth, v_texCoords).r) - 1.0, 1.0);
+    vec4 positionViewSpace = inverseProjection * positionCVV;
+    positionViewSpace /= positionViewSpace.w;
     vec3 normalViewSpace   = texture(gBufferNormalViewSpace,   v_texCoords).xyz;
     vec4 albedoMetallic    = texture(gBufferAlbedoMetallic,    v_texCoords).rgba;
     vec4 emissionRoughness = texture(gBufferEmissionRoughness, v_texCoords).rgba;
@@ -321,6 +323,8 @@ void main() {
     float roughness = emissionRoughness.w;
 
     out_color = computeLightingAndShading(positionViewSpace, normalViewSpace, albedo, roughness, metallic);
+
+    //out_color = vec4(1, 0, 0, 1);
 
     #endif // ENABLE_MSAA
 }

@@ -1,0 +1,10 @@
+{
+    "states" : [
+        {
+            "id" : "walk",
+            "clip" : "Walk"
+        }
+    ],
+
+    "initial-state-id" : "walk"
+}

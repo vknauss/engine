@@ -20,13 +20,15 @@ uniform vec3 ssaoKernelSamples[ssaoKernelSize];
 uniform sampler2DMS gBufferPositionViewSpace;
 uniform sampler2DMS gBufferNormalViewSpace;
 #else
-uniform sampler2D gBufferPositionViewSpace;
+//uniform sampler2D gBufferPositionViewSpace;
+uniform sampler2D gBufferDepth;
 uniform sampler2D gBufferNormalViewSpace;
 #endif // ENABLE_MSAA
 
 uniform sampler2D randomRotationTexture;
 
 uniform mat4 projection;
+uniform mat4 inverseProjection;
 
 float computeAO(vec3 positionViewSpace, vec3 normalViewSpace, vec3 randomRotation) {
     // compute tangent-to-view space transform
@@ -46,11 +48,17 @@ float computeAO(vec3 positionViewSpace, vec3 normalViewSpace, vec3 randomRotatio
         #ifdef ENABLE_MSAA
         vec4 samplePosition = texelFetch(gBufferPositionViewSpace, ivec2(sampleClipSpace.xy * textureSize(gBufferPositionViewSpace)), 0);
         #else
-        vec4 samplePosition = texture(gBufferPositionViewSpace, sampleClipSpace.xy);
+        //vec4 samplePosition = texture(gBufferPositionViewSpace, sampleClipSpace.xy);
+        //float sampleDepth = texture(gBufferPositionViewSpace, sampleClipSpace.xy).z;
+        vec4 samplePosCVV = vec4(2.0 * vec3(sampleClipSpace.xy, texture(gBufferDepth, sampleClipSpace.xy).x) - 1.0, 1.0);
+        vec4 samplePosition = inverseProjection * samplePosCVV;
+        samplePosition /= samplePosition.w;
+        float sampleDepth = samplePosition.z;
         #endif // ENABLE_MSAA
 
         //occlusion += max(samplePosition.z - sampleViewSpace.z, 0.0) / sampleRadius * float(abs(samplePosition.z - positionViewSpace.z) <= sampleRadius) * samplePosition.w;
-        occlusion += float(samplePosition.z - sampleViewSpace.z > 0.0) * float(abs(samplePosition.z - positionViewSpace.z) <= sampleRadius) * samplePosition.w;
+        //occlusion += float(sampleDepth - sampleClipSpace.z < 0.0) * float(abs(sampleDepth - clipSpaceDepth) <= sampleRadius);
+        occlusion += float(sampleDepth - sampleViewSpace.z > 0.0) * float(abs(sampleDepth - positionViewSpace.z) <= sampleRadius);
     }
 
     occlusion /= float(ssaoKernelSize);
@@ -63,12 +71,17 @@ void main() {
     vec4 positionViewSpace = texelFetch(gBufferPositionViewSpace, texCoordsMS, 0);
     vec3 normalViewSpace = normalize(2.0 * texelFetch(gBufferNormalViewSpace, texCoordsMS, 0).xyz - vec3(1.0));
     #else
-    vec4 positionViewSpace = texture(gBufferPositionViewSpace, v_texCoords);
+    //vec4 positionViewSpace = texture(gBufferPositionViewSpace, v_texCoords);
+    //float depth = positionViewSpace.z;
+    float depth = texture(gBufferDepth, v_texCoords).r;
+    vec4 positionCVV = vec4(2.0 * vec3(v_texCoords, depth) - 1.0, 1.0);
+    vec4 positionViewSpace = inverseProjection * positionCVV;
+    positionViewSpace /= positionViewSpace.w;
     vec3 normalViewSpace = normalize(2.0 * texture(gBufferNormalViewSpace, v_texCoords).xyz - vec3(1.0));
     #endif // ENABLE_MSAA
     vec3 rotation = texture(randomRotationTexture, gl_FragCoord.xy / float(rotationTextureSize)).xyz;
 
-    if(positionViewSpace.w == 0.0) discard;
+    //if(positionViewSpace.w == 0.0) discard;
     o_ambient = vec3(1.0 - computeAO(positionViewSpace.xyz, normalViewSpace, rotation));
 
 }

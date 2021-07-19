@@ -16,11 +16,11 @@ uniform float lightBleedCorrectionPower;
 
 uniform int enableEVSM;
 
-//const float cPos = 42.0;
-//const float cNeg = 14.0;
+const float cPos = 42.0;
+const float cNeg = 14.0;
 
-const float cPos = 1.0;
-const float cNeg = 1.0;
+//const float cPos = 1.0;
+//const float cNeg = 1.0;
 #endif // ENABLE_SHADOW
 
 #ifdef ENABLE_MSAA
@@ -29,16 +29,19 @@ uniform sampler2DMS gBufferNormalViewSpace;
 uniform sampler2DMS gBufferAlbedoMetallic;
 uniform sampler2DMS gBufferEmissionRoughness;
 #else
-uniform sampler2D gBufferPositionViewSpace;
+//uniform sampler2D gBufferPositionViewSpace;
 uniform sampler2D gBufferNormalViewSpace;
 uniform sampler2D gBufferAlbedoMetallic;
 uniform sampler2D gBufferEmissionRoughness;
+uniform sampler2D gBufferDepth;
 #endif // ENABLE_MSAA
 
 const float gamma = 2.2;
 const int samples = 4;
 const float PI = 3.14159265;
 
+uniform mat4 inverseProjection;
+uniform vec2 pixelSize;
 
 const mat4 coordTransform = mat4(
     0.5, 0.0, 0.0, 0.0,
@@ -96,7 +99,27 @@ float sampleVisible(float depth, vec3 dir) {
     float visible = 0.0;
 
     if(enableEVSM == 1) {
-        visible = computeVisibleEVSM(depth, sampleMomentsEVSM(dir));
+        vec4 moments = sampleMomentsEVSM(dir);
+        /*int boxWidth = 5;
+        float incr = 0.005; //0.5 / textureSize(shadowMap, 0).x;
+        vec3 right = normalize(cross(dir, vec3(0, 1, 0)));
+        vec3 up = cross(right, dir);
+        for (int i = 1; i < boxWidth; ++i) {
+                moments += sampleMomentsEVSM(dir + incr * i * right)
+                            + sampleMomentsEVSM(dir - incr * i * right);
+                for (int j = 1; j < boxWidth; ++j)
+                    moments += sampleMomentsEVSM(dir + incr * i * right + incr * j * up)
+                                + sampleMomentsEVSM(dir + incr * i * right - incr * j * up)
+                                + sampleMomentsEVSM(dir - incr * i * right - incr * j * up)
+                                + sampleMomentsEVSM(dir - incr * i * right + incr * j * up);
+        }
+        for (int j = 1; j < boxWidth; ++j)
+            moments += sampleMomentsEVSM(dir + incr * j * up)
+                        + sampleMomentsEVSM(dir - incr * j * up);
+
+        moments /= float((2*boxWidth-1)*(2*boxWidth-1));*/
+
+        visible = computeVisibleEVSM(depth, moments);
     } else {
         visible = computeVisibleVSM(depth, sampleMomentsVSM(dir));
     }
@@ -297,9 +320,12 @@ void main() {
         out_color = computeLightingAndShading(positionViewSpace, normalViewSpace, albedo, roughness, metallic);
     }
     #else
-    vec2 v_texCoords = gl_FragCoord.xy / textureSize(gBufferPositionViewSpace, 0).xy;
+    vec2 v_texCoords = gl_FragCoord.xy * pixelSize;
 
-    vec4 positionViewSpace = texture(gBufferPositionViewSpace, v_texCoords).xyzw;
+    vec4 positionCVV = vec4(2.0 * vec3(v_texCoords, texture(gBufferDepth, v_texCoords).r) - 1.0, 1.0);
+    vec4 positionViewSpace = inverseProjection * positionCVV;
+    positionViewSpace /= positionViewSpace.w;
+    //vec4 positionViewSpace = texture(gBufferPositionViewSpace, v_texCoords).xyzw;
     vec3 normalViewSpace   = texture(gBufferNormalViewSpace,   v_texCoords).xyz;
     vec4 albedoMetallic    = texture(gBufferAlbedoMetallic,    v_texCoords).rgba;
     vec4 emissionRoughness = texture(gBufferEmissionRoughness, v_texCoords).rgba;
